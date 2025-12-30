@@ -1,0 +1,67 @@
+# 操作系统生成文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# 编辑器配置文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# 依赖目录
+node_modules/
+vendor/
+jspm_packages/
+
+# 构建输出目录
+dist/
+build/
+out/
+*.log
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.temp
+
+# 测试文件夹
+test_folder/
+test_folder_updated/
+
+# 配置文件（用户特定）
+folders.config.json
+
+# 其他
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
