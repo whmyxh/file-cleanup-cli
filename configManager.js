@@ -5,10 +5,18 @@
 
 import fs from 'fs-extra';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import yaml from 'js-yaml';
 import logger from './logger.js';
 
+/**
+ * 获取当前模块的目录路径
+ * @returns {string} - 当前模块的目录路径
+ */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 // 配置文件路径
-const CONFIG_FILE = 'folders.config.json';
+const CONFIG_FILE = path.join(__dirname, 'config.yaml');
 
 /**
  * 验证文件夹路径是否有效
@@ -66,7 +74,7 @@ const loadConfig = () => {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const data = fs.readFileSync(CONFIG_FILE, 'utf8');
-      const config = JSON.parse(data);
+      const config = yaml.load(data);
       logger.info(`成功加载配置文件: ${CONFIG_FILE}`, { folders: config.folders });
       return config.folders || [];
     } else {
@@ -86,8 +94,68 @@ const loadConfig = () => {
  */
 const saveConfig = (folders) => {
   try {
-    const config = { folders };
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), 'utf8');
+    // 读取现有配置值
+    let config = {
+      retentionDays: 7,
+      allowedExtensions: ['docx', 'xlsx', 'csv', 'pptx', 'txt'],
+      protectedFiles: ['desktop.ini', 'thumbs.db', '$recycle.bin', 'system volume information'],
+      logConfig: {
+        level: 'info',
+        filePath: 'logs/cleanup.log',
+        maxSize: 10,
+        maxFiles: 5
+      }
+    };
+    
+    if (fs.existsSync(CONFIG_FILE)) {
+      const data = fs.readFileSync(CONFIG_FILE, 'utf8');
+      const loadedConfig = yaml.load(data) || {};
+      // 合并现有配置值
+      config = {
+        retentionDays: loadedConfig.retentionDays || config.retentionDays,
+        allowedExtensions: loadedConfig.allowedExtensions || config.allowedExtensions,
+        protectedFiles: loadedConfig.protectedFiles || config.protectedFiles,
+        logConfig: loadedConfig.logConfig || config.logConfig
+      };
+    }
+    
+    // 更新folders字段
+    config.folders = folders;
+    
+    // 创建带注释的YAML内容
+    const yamlContent = `# 清理脚本配置文件
+# 定义清理规则和保留策略
+
+# 默认文件保留天数（单位：天）
+retentionDays: ${config.retentionDays}
+
+# 允许删除的文件扩展名列表（区分大小写）
+allowedExtensions:
+${config.allowedExtensions.map(ext => `  - ${ext}`).join('\n')}
+
+# 系统保护文件列表（文件名，不区分大小写）
+protectedFiles:
+${config.protectedFiles.map(file => `  - ${file}`).join('\n')}
+
+# 日志配置
+logConfig:
+  # 日志级别：error, warn, info, verbose, debug, silly
+  level: ${config.logConfig.level}
+  # 日志文件路径
+  filePath: ${config.logConfig.filePath}
+  # 日志文件最大大小（单位：MB）
+  maxSize: ${config.logConfig.maxSize}
+  # 日志文件最大数量
+  maxFiles: ${config.logConfig.maxFiles}
+
+# 要清理的文件夹列表（绝对路径）
+folders:
+${config.folders.map(folder => `  - "${folder.replace(/\\/g, '\\\\')}"`).join('\n')}
+`;
+    
+    // 保存配置到YAML文件
+    fs.writeFileSync(CONFIG_FILE, yamlContent, 'utf8');
+    
     logger.info(`成功保存配置文件: ${CONFIG_FILE}`, { folders });
     return true;
   } catch (error) {

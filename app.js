@@ -4,6 +4,8 @@
  */
 
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import logger from './logger.js';
 import { executeCleanup } from './cleaner.js';
@@ -18,12 +20,19 @@ import {
 import readline from 'readline';
 
 /**
+ * 获取当前模块的目录路径
+ * @returns {string} - 当前模块的目录路径
+ */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
  * 加载YAML配置文件
  * @returns {Object} - 配置对象
  */
 const loadConfig = () => {
   try {
-    const fileContents = fs.readFileSync('./config.yaml', 'utf8');
+    const configPath = path.join(__dirname, 'config.yaml');
+    const fileContents = fs.readFileSync(configPath, 'utf8');
     const data = yaml.load(fileContents);
     return data;
   } catch (e) {
@@ -112,19 +121,34 @@ const parseArguments = () => {
       showHelp();
       process.exit(0);
     }
+    
+    // 解析 --version 参数
+    if (arg === '--version' || arg === '-v') {
+      showVersion();
+      process.exit(0);
+    }
   }
   
   return result;
 };
 
 /**
+ * 显示版本信息
+ */
+const showVersion = () => {
+  const packagePath = path.join(__dirname, 'package.json');
+  const packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+  console.log(`file-cleanup-cli v${packageJson.version}`);
+};
+
+/**
  * 显示帮助信息
  */
 const showHelp = () => {
-  console.log('文件清理脚本 - 使用说明');
+  console.log('file-cleanup-cli - 文件清理命令行工具');
   console.log('');
   console.log('用法:');
-  console.log('  node app.js [选项]');
+  console.log('  file-cleanup [选项]');
   console.log('');
   console.log('清理选项:');
   console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天）');
@@ -138,14 +162,17 @@ const showHelp = () => {
   console.log('');
   console.log('其他选项:');
   console.log('  -h, --help            显示帮助信息');
+  console.log('  -v, --version         显示版本信息');
   console.log('');
   console.log('示例:');
   console.log('  # 配置管理');
-  console.log('  node app.js --add "E:\\temp\\logs"');
-  console.log('  node app.js --remove "E:\\temp\\logs"');
-  console.log('  node app.js --update "E:\\temp\\logs" "E:\\temp\\new_logs"');
-  console.log('  node app.js --list');
-  console.log('  node app.js --clear');
+  console.log('  file-cleanup --add "E:\\temp\\logs"');
+  console.log('  file-cleanup --remove "E:\\temp\\logs"');
+  console.log('  file-cleanup --update "E:\\temp\\logs" "E:\\temp\\new_logs"');
+  console.log('  file-cleanup --list');
+  console.log('  file-cleanup --clear');
+  console.log('  # 执行清理');
+  console.log('  file-cleanup --days 30');
   console.log('');
 };
 
@@ -164,7 +191,7 @@ const main = () => {
       // 添加文件夹到配置
       if (!params.configPath) {
         console.error('错误: 请指定要添加的文件夹路径');
-        console.log('用法: node app.js --add <路径>');
+        console.log('用法: file-cleanup --add <路径>');
         process.exit(1);
       }
       const addResult = addFolder(params.configPath);
@@ -175,7 +202,7 @@ const main = () => {
       // 从配置中删除文件夹
       if (!params.configPath) {
         console.error('错误: 请指定要删除的文件夹路径');
-        console.log('用法: node app.js --remove <路径>');
+        console.log('用法: file-cleanup --remove <路径>');
         process.exit(1);
       }
       const removeResult = removeFolder(params.configPath);
@@ -186,7 +213,7 @@ const main = () => {
       // 修改配置中的文件夹路径
       if (!params.configPath || !params.configNewPath) {
         console.error('错误: 请指定旧路径和新路径');
-        console.log('用法: node app.js --update <旧路径> <新路径>');
+        console.log('用法: file-cleanup --update <旧路径> <新路径>');
         process.exit(1);
       }
       const updateResult = updateFolder(params.configPath, params.configNewPath);

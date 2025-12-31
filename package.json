@@ -1,16 +1,47 @@
 {
-  "name": "file_deletion",
+  "name": "file-cleanup-cli",
   "version": "1.0.0",
-  "description": "",
+  "description": "一个功能强大的文件清理命令行工具，支持基于配置的自动清理、文件格式限制和灵活的文件夹管理",
   "main": "app.js",
+  "bin": {
+    "file-cleanup": "./bin/cli.js"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node app.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": [
+    "file-cleanup",
+    "clean",
+    "delete",
+    "cli",
+    "file-management",
+    "automation",
+    "cleanup-tool"
+  ],
+  "author": "Developer <developer@example.com>",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "files": [
+    "bin/",
+    "app.js",
+    "cleaner.js",
+    "logger.js",
+    "configManager.js",
+    "config.yaml",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/file-cleanup-cli.git"
+  },
+  "homepage": "https://github.com/yourusername/file-cleanup-cli#readme",
+  "bugs": {
+    "url": "https://github.com/yourusername/file-cleanup-cli/issues"
+  },
   "dependencies": {
     "fs-extra": "^11.3.3",
     "js-yaml": "^4.1.1",

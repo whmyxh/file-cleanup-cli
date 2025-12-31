@@ -5,8 +5,15 @@
 
 import fs from 'fs-extra';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
 import logger from './logger.js';
+
+/**
+ * 获取当前模块的目录路径
+ * @returns {string} - 当前模块的目录路径
+ */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * 加载YAML配置文件
@@ -14,7 +21,8 @@ import logger from './logger.js';
  */
 const loadConfig = () => {
   try {
-    const fileContents = fs.readFileSync('./config.yaml', 'utf8');
+    const configPath = path.join(__dirname, 'config.yaml');
+    const fileContents = fs.readFileSync(configPath, 'utf8');
     const data = yaml.load(fileContents);
     return data;
   } catch (e) {
@@ -56,7 +64,9 @@ const isAllowedExtension = (fileName) => {
 const isExpired = (filePath, retentionDays) => {
   try {
     const stats = fs.statSync(filePath);
-    const fileAgeMs = Date.now() - stats.birthtimeMs;
+    // 同时检查创建时间和修改时间，使用最新的时间来计算文件年龄
+    const fileTimeMs = Math.max(stats.birthtimeMs || 0, stats.mtimeMs || 0);
+    const fileAgeMs = Date.now() - fileTimeMs;
     const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
     return fileAgeMs > retentionMs;
   } catch (error) {
@@ -131,18 +141,8 @@ const cleanFolder = (folderPath) => {
         continue;
       }
       
-      // 检查文件扩展名是否允许删除
-      if (!isAllowedExtension(file)) {
-        logger.warn(`文件扩展名不允许删除，跳过删除: ${filePath}`, {
-          fileName: file,
-          extension: path.extname(file)
-        });
-        skippedFiles++;
-        continue;
-      }
-      
       try {
-        // 检查是否为文件夹
+        // 先检查是否为文件夹
         const stats = fs.statSync(filePath);
         if (stats.isDirectory()) {
           // 递归清理子文件夹
@@ -150,6 +150,16 @@ const cleanFolder = (folderPath) => {
           totalFiles += subFolderResult.totalFiles;
           deletedFiles += subFolderResult.deletedFiles;
           skippedFiles += subFolderResult.skippedFiles;
+          continue;
+        }
+        
+        // 检查文件扩展名是否允许删除（仅对文件执行此检查）
+        if (!isAllowedExtension(file)) {
+          logger.warn(`文件扩展名不允许删除，跳过删除: ${filePath}`, {
+            fileName: file,
+            extension: path.extname(file)
+          });
+          skippedFiles++;
           continue;
         }
         

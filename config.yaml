@@ -29,3 +29,7 @@ logConfig:
   maxSize: 10
   # 日志文件最大数量
   maxFiles: 5
+
+# 要清理的文件夹列表（绝对路径）
+folders:
+  - "E:\\js_project\\File_Deletion\\test_folder_updated"

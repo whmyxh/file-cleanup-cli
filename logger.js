@@ -7,7 +7,32 @@ import winston from 'winston';
 import { format } from 'winston';
 import path from 'path';
 import fs from 'fs';
-import config from './config.js';
+import { fileURLToPath } from 'url';
+import yaml from 'js-yaml';
+
+/**
+ * 获取当前模块的目录路径
+ * @returns {string} - 当前模块的目录路径
+ */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 加载YAML配置文件
+ * @returns {Object} - 配置对象
+ */
+const loadConfig = () => {
+  try {
+    const configPath = path.join(__dirname, 'config.yaml');
+    const fileContents = fs.readFileSync(configPath, 'utf8');
+    const data = yaml.load(fileContents);
+    return data;
+  } catch (e) {
+    console.error(`加载配置文件失败: ${e.message}`);
+    throw e;
+  }
+};
+
+const config = loadConfig();
 
 // 确保日志目录存在
 const logDir = path.dirname(config.logConfig.filePath);
