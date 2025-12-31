@@ -192,7 +192,7 @@ folders:
 ### 克隆仓库
 
 ```bash
-git clone https://github.com/yourusername/file-cleanup-cli.git
+git clone https://github.com/whmyxh/file-cleanup-cli.git
 cd file-cleanup-cli
 ```
 
@@ -224,12 +224,12 @@ MIT License
 
 ## 作者
 
-Developer <developer@example.com>
+whmyxh <hmyxhxjr@qq.com>
 
 ## 相关链接
 
-- [GitHub 仓库](https://github.com/yourusername/file-cleanup-cli)
-- [问题反馈](https://github.com/yourusername/file-cleanup-cli/issues)
+- [GitHub 仓库](https://github.com/whmyxh/file-cleanup-cli.git)
+- [问题反馈](https://github.com/whmyxh/file-cleanup-cli/issues)
 
 ## 更新日志
 

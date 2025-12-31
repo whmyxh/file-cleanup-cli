@@ -19,7 +19,7 @@
     "automation",
     "cleanup-tool"
   ],
-  "author": "Developer <developer@example.com>",
+  "author": "whmyxh <hmyxhxjr@qq.com>",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -36,11 +36,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/file-cleanup-cli.git"
+    "url": "https://github.com/whmyxh/file-cleanup-cli.git"
   },
-  "homepage": "https://github.com/yourusername/file-cleanup-cli#readme",
+  "homepage": "https://github.com/whmyxh/file-cleanup-cli#readme",
   "bugs": {
-    "url": "https://github.com/yourusername/file-cleanup-cli/issues"
+    "url": "https://github.com/whmyxh/file-cleanup-cli/issues"
   },
   "dependencies": {
     "fs-extra": "^11.3.3",

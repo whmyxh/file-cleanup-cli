@@ -1,3 +1,5 @@
+# 测试文件夹
+test*/
 # 操作系统生成文件
 .DS_Store
 .DS_Store?
@@ -47,10 +49,6 @@ tmp/
 temp/
 *.tmp
 *.temp
-
-# 测试文件夹
-test_folder/
-test_folder_updated/
 
 # 其他
 .cache/
