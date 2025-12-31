@@ -20,49 +20,47 @@ const CONFIG_FILE = path.join(__dirname, 'config.yaml');
 
 /**
  * 验证文件夹路径是否有效
- * @param {string} folderPath - 文件夹路径
- * @returns {Object} - 验证结果 { valid: boolean, error: string }
+ * @param {string} folderPath - 文件夹路径（可以是相对路径或绝对路径）
+ * @returns {Object} - 验证结果 { valid: boolean, error: string, absolutePath: string }
  */
 const validateFolderPath = (folderPath) => {
   try {
     // 检查路径是否为空
     if (!folderPath || folderPath.trim() === '') {
-      return { valid: false, error: '文件夹路径不能为空' };
+      return { valid: false, error: '文件夹路径不能为空', absolutePath: null };
     }
 
-    // 检查路径是否为绝对路径
-    if (!path.isAbsolute(folderPath)) {
-      return { valid: false, error: '文件夹路径必须是绝对路径' };
-    }
+    // 将相对路径转换为绝对路径
+    const absolutePath = path.isAbsolute(folderPath) ? folderPath : path.join(process.cwd(), folderPath);
 
     // 检查文件夹是否存在
-    if (!fs.existsSync(folderPath)) {
-      return { valid: false, error: '文件夹不存在' };
+    if (!fs.existsSync(absolutePath)) {
+      return { valid: false, error: '文件夹不存在', absolutePath };
     }
 
     // 检查路径是否为文件夹
-    const stats = fs.statSync(folderPath);
+    const stats = fs.statSync(absolutePath);
     if (!stats.isDirectory()) {
-      return { valid: false, error: '路径不是一个文件夹' };
+      return { valid: false, error: '路径不是一个文件夹', absolutePath };
     }
 
     // 检查是否有读取权限
     try {
-      fs.accessSync(folderPath, fs.constants.R_OK);
+      fs.accessSync(absolutePath, fs.constants.R_OK);
     } catch (error) {
-      return { valid: false, error: '没有读取文件夹的权限' };
+      return { valid: false, error: '没有读取文件夹的权限', absolutePath };
     }
 
     // 检查是否有写入权限（用于删除文件）
     try {
-      fs.accessSync(folderPath, fs.constants.W_OK);
+      fs.accessSync(absolutePath, fs.constants.W_OK);
     } catch (error) {
-      return { valid: false, error: '没有写入文件夹的权限' };
+      return { valid: false, error: '没有写入文件夹的权限', absolutePath };
     }
 
-    return { valid: true, error: null };
+    return { valid: true, error: null, absolutePath };
   } catch (error) {
-    return { valid: false, error: `验证失败: ${error.message}` };
+    return { valid: false, error: `验证失败: ${error.message}`, absolutePath: null };
   }
 };
 
@@ -166,7 +164,7 @@ ${config.folders.map(folder => `  - "${folder.replace(/\\/g, '\\\\')}"`).join('\
 
 /**
  * 添加文件夹路径
- * @param {string} folderPath - 文件夹路径
+ * @param {string} folderPath - 文件夹路径（可以是相对路径或绝对路径）
  * @returns {Object} - 操作结果 { success: boolean, message: string }
  */
 const addFolder = (folderPath) => {
@@ -179,18 +177,21 @@ const addFolder = (folderPath) => {
     return { success: false, message: validation.error };
   }
   
+  // 使用绝对路径
+  const absolutePath = validation.absolutePath;
+  
   // 检查是否已存在
-  if (folders.includes(folderPath)) {
-    logger.warn(`文件夹已存在: ${folderPath}`);
+  if (folders.includes(absolutePath)) {
+    logger.warn(`文件夹已存在: ${absolutePath}`);
     return { success: false, message: '文件夹已存在于配置中' };
   }
   
   // 添加文件夹
-  folders.push(folderPath);
+  folders.push(absolutePath);
   
   // 保存配置
   if (saveConfig(folders)) {
-    logger.info(`成功添加文件夹: ${folderPath}`);
+    logger.info(`成功添加文件夹: ${absolutePath}`);
     return { success: true, message: '文件夹添加成功' };
   } else {
     return { success: false, message: '保存配置失败' };
@@ -199,16 +200,19 @@ const addFolder = (folderPath) => {
 
 /**
  * 删除文件夹路径
- * @param {string} folderPath - 文件夹路径
+ * @param {string} folderPath - 文件夹路径（可以是相对路径或绝对路径）
  * @returns {Object} - 操作结果 { success: boolean, message: string }
  */
 const removeFolder = (folderPath) => {
   const folders = loadConfig();
   
+  // 将相对路径转换为绝对路径
+  const absolutePath = path.isAbsolute(folderPath) ? folderPath : path.join(process.cwd(), folderPath);
+  
   // 检查是否存在
-  const index = folders.indexOf(folderPath);
+  const index = folders.indexOf(absolutePath);
   if (index === -1) {
-    logger.warn(`文件夹不存在: ${folderPath}`);
+    logger.warn(`文件夹不存在: ${absolutePath}`);
     return { success: false, message: '文件夹不存在于配置中' };
   }
   
@@ -217,7 +221,7 @@ const removeFolder = (folderPath) => {
   
   // 保存配置
   if (saveConfig(folders)) {
-    logger.info(`成功删除文件夹: ${folderPath}`);
+    logger.info(`成功删除文件夹: ${absolutePath}`);
     return { success: true, message: '文件夹删除成功' };
   } else {
     return { success: false, message: '保存配置失败' };
@@ -226,17 +230,20 @@ const removeFolder = (folderPath) => {
 
 /**
  * 修改文件夹路径
- * @param {string} oldPath - 旧文件夹路径
- * @param {string} newPath - 新文件夹路径
+ * @param {string} oldPath - 旧文件夹路径（可以是相对路径或绝对路径）
+ * @param {string} newPath - 新文件夹路径（可以是相对路径或绝对路径）
  * @returns {Object} - 操作结果 { success: boolean, message: string }
  */
 const updateFolder = (oldPath, newPath) => {
   const folders = loadConfig();
   
+  // 将旧路径转换为绝对路径
+  const oldAbsolutePath = path.isAbsolute(oldPath) ? oldPath : path.join(process.cwd(), oldPath);
+  
   // 检查旧路径是否存在
-  const index = folders.indexOf(oldPath);
+  const index = folders.indexOf(oldAbsolutePath);
   if (index === -1) {
-    logger.warn(`要修改的文件夹不存在: ${oldPath}`);
+    logger.warn(`要修改的文件夹不存在: ${oldAbsolutePath}`);
     return { success: false, message: '要修改的文件夹不存在于配置中' };
   }
   
@@ -247,18 +254,21 @@ const updateFolder = (oldPath, newPath) => {
     return { success: false, message: validation.error };
   }
   
+  // 使用新路径的绝对路径
+  const newAbsolutePath = validation.absolutePath;
+  
   // 检查新路径是否已存在（排除自身）
-  if (folders.includes(newPath) && newPath !== oldPath) {
-    logger.warn(`新文件夹路径已存在: ${newPath}`);
+  if (folders.includes(newAbsolutePath) && newAbsolutePath !== oldAbsolutePath) {
+    logger.warn(`新文件夹路径已存在: ${newAbsolutePath}`);
     return { success: false, message: '新文件夹路径已存在于配置中' };
   }
   
   // 修改文件夹
-  folders[index] = newPath;
+  folders[index] = newAbsolutePath;
   
   // 保存配置
   if (saveConfig(folders)) {
-    logger.info(`成功修改文件夹: ${oldPath} -> ${newPath}`);
+    logger.info(`成功修改文件夹: ${oldAbsolutePath} -> ${newAbsolutePath}`);
     return { success: true, message: '文件夹修改成功' };
   } else {
     return { success: false, message: '保存配置失败' };
