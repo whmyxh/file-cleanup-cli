@@ -11,6 +11,7 @@ allowedExtensions:
   - csv
   - pptx
   - txt
+  - xls
 
 # 系统保护文件列表（文件名，不区分大小写）
 protectedFiles:
@@ -30,7 +31,6 @@ logConfig:
   # 日志文件最大数量
   maxFiles: 5
 
-# 要清理的文件夹列表（文件路径）
+# 要清理的文件夹列表（绝对路径）
 folders:
-  - "E:\\js_project\\File_Deletion\\test_folder_updated"
-  - "E:\\js_project\\File_Deletion\\test_update_folder"
+

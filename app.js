@@ -51,7 +51,7 @@ const parseArguments = () => {
   const args = process.argv.slice(2);
   const result = {
     retentionDays: config.retentionDays,
-    action: 'cleanup',
+    action: args.length === 0 ? 'help' : 'cleanup',
     configPath: null,
     configNewPath: null
   };
@@ -111,8 +111,13 @@ const parseArguments = () => {
       result.action = 'list';
     }
     
-    // 解析 --clear 参数（清空所有配置）
+    // 解析 --clear 参数（执行文件清理）
     if (arg === '--clear') {
+      result.action = 'cleanup';
+    }
+    
+    // 解析 --configclear 参数（清空所有配置）
+    if (arg === '--configclear') {
       result.action = 'clear';
     }
     
@@ -154,25 +159,47 @@ const showHelp = () => {
   console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天）');
   console.log('');
   console.log('配置管理选项:');
-  console.log('  --add <路径>          添加文件夹到配置');
-  console.log('  --remove <路径>       从配置中删除文件夹');
-  console.log('  --update <旧路径> <新路径>  修改配置中的文件夹路径');
+  console.log('  --add <路径>          添加文件夹到配置（支持绝对路径和相对路径）');
+  console.log('  --remove <路径>       从配置中删除文件夹（支持绝对路径和相对路径）');
+  console.log('  --update <旧路径> <新路径>  修改配置中的文件夹路径（支持绝对路径和相对路径）');
   console.log('  --list                列出所有配置的文件夹');
-  console.log('  --clear               清空所有配置');
+  console.log('  --configclear         清空所有配置');
+  console.log('');
+  console.log('清理操作选项:');
+  console.log('  --clear               执行文件清理操作');
+  console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天）');
   console.log('');
   console.log('其他选项:');
   console.log('  -h, --help            显示帮助信息');
   console.log('  -v, --version         显示版本信息');
   console.log('');
+  console.log('相对路径使用说明:');
+  console.log('  - 支持当前目录相对路径: ./subfolder, ./file.txt');
+  console.log('  - 支持上级目录相对路径: ../parentfolder, ../../grandparentfolder');
+  console.log('  - 支持多级相对路径: ./subfolder1/subfolder2, ../parentfolder/subfolder');
+  console.log('  - 相对路径会自动转换为绝对路径存储在配置文件中');
+  console.log('');
   console.log('示例:');
-  console.log('  # 配置管理');
-  console.log('  file-cleanup --add "E:\\temp\\logs"');
-  console.log('  file-cleanup --remove "E:\\temp\\logs"');
-  console.log('  file-cleanup --update "E:\\temp\\logs" "E:\\temp\\new_logs"');
+  console.log('  # 配置管理（使用绝对路径）');
+  console.log('  file-cleanup --add "E:\temp\logs"');
+  console.log('  file-cleanup --remove "E:\temp\logs"');
+  console.log('  file-cleanup --update "E:\temp\logs" "E:\temp\new_logs"');
   console.log('  file-cleanup --list');
-  console.log('  file-cleanup --clear');
+  console.log('  file-cleanup --configclear');
+  console.log('');
+  console.log('  # 配置管理（使用相对路径）');
+  console.log('  file-cleanup --add ./logs');
+  console.log('  file-cleanup --add ../temp/files');
+  console.log('  file-cleanup --remove ./logs');
+  console.log('  file-cleanup --update ./old-folder ./new-folder');
+  console.log('');
   console.log('  # 执行清理');
-  console.log('  file-cleanup --days 30');
+  console.log('  file-cleanup --clear --days 30');
+  console.log('');
+  console.log('注意事项:');
+  console.log('  - 当未指定任何选项时，默认显示此帮助文档');
+  console.log('  - 清理操作仅在配置了文件夹且使用了相关选项时执行');
+  console.log('  - 系统会自动跳过正在使用的文件，避免因删除正在使用的文件导致系统错误');
   console.log('');
 };
 
@@ -187,6 +214,10 @@ const main = () => {
   
   // 根据操作类型执行不同功能
   switch (params.action) {
+    case 'help':
+      showHelp();
+      process.exit(0);
+      break;
     case 'add':
       // 添加文件夹到配置
       if (!params.configPath) {
@@ -235,6 +266,7 @@ const main = () => {
       
     case 'clear':
       // 清空所有配置
+      console.log('=== 清空配置操作 ===');
       console.log('确定要清空所有文件夹配置吗？(y/n)');
       const rl = readline.createInterface({
         input: process.stdin,
@@ -242,12 +274,23 @@ const main = () => {
       });
       rl.question('', (answer) => {
         rl.close();
+        console.log('');
         if (answer.toLowerCase() === 'y') {
+          console.log('正在清空所有文件夹配置...');
           const clearResult = clearAllFolders();
-          console.log(clearResult.message);
-          process.exit(clearResult.success ? 0 : 1);
+          console.log('');
+          if (clearResult.success) {
+            console.log('✅ ' + clearResult.message);
+            console.log('=== 清空配置操作完成 ===');
+            process.exit(0);
+          } else {
+            console.log('❌ ' + clearResult.message);
+            console.log('=== 清空配置操作失败 ===');
+            process.exit(1);
+          }
         } else {
-          console.log('操作已取消');
+          console.log('❌ 操作已取消');
+          console.log('=== 清空配置操作终止 ===');
           process.exit(0);
         }
       });
@@ -256,26 +299,46 @@ const main = () => {
     case 'cleanup':
     default:
       // 清理操作
+      console.log('=== 文件清理操作 ===');
+      console.log('正在准备清理任务...');
+      
       // 从配置文件读取文件夹
       const configFolders = getAllFolders();
       if (configFolders.length === 0) {
         logger.error('配置文件中没有配置任何文件夹');
+        console.log('');
+        console.log('❌ 错误: 配置文件中没有配置任何文件夹');
         console.log('');
         console.log('请使用以下方式之一:');
         console.log('  1. 使用 --add 参数添加文件夹到配置');
         console.log('  2. 使用 --list 查看已配置的文件夹');
         console.log('');
         showHelp();
+        console.log('=== 文件清理操作终止 ===');
         process.exit(1);
       }
       
       // 更新配置中的保留天数
       config.retentionDays = params.retentionDays;
       
+      console.log(`\n🔍 清理参数:`);
+      console.log(`   目标文件夹: ${configFolders.join(', ')}`);
+      console.log(`   保留天数: ${params.retentionDays}天`);
+      console.log(`   开始时间: ${new Date().toLocaleString()}`);
+      
       logger.info(`清理参数: 文件夹=${configFolders.join(', ')}, 保留天数=${params.retentionDays}`);
       
+      console.log('\n📦 正在执行清理任务...');
+      
       // 执行清理任务
-      const result = executeCleanup(configFolders);
+      const result = executeCleanup(configFolders, params.retentionDays);
+      
+      console.log('\n✅ 文件清理任务完成!');
+      console.log(`   总计检查文件: ${result.totalFiles}个`);
+      console.log(`   成功删除文件: ${result.deletedFiles}个`);
+      console.log(`   跳过文件: ${result.skippedFiles}个`);
+      console.log(`   结束时间: ${new Date().toLocaleString()}`);
+      console.log('=== 文件清理操作完成 ===');
       
       logger.info('=== 文件清理脚本结束 ===');
       break;

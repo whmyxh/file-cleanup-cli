@@ -68,6 +68,13 @@ const isExpired = (filePath, retentionDays) => {
     const fileTimeMs = Math.max(stats.birthtimeMs || 0, stats.mtimeMs || 0);
     const fileAgeMs = Date.now() - fileTimeMs;
     const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
+    
+    // 如果保留天数为0，则所有文件都过期
+    if (retentionDays === 0) {
+      return true;
+    }
+    
+    // 否则检查文件年龄是否超过保留天数
     return fileAgeMs > retentionMs;
   } catch (error) {
     logger.warn(`获取文件状态失败: ${filePath}`, { error: error.message });
@@ -81,14 +88,66 @@ const isExpired = (filePath, retentionDays) => {
  * @returns {boolean} - 是否正在使用
  */
 const isFileInUse = (filePath) => {
+  let fd = null;
+  
   try {
-    // 尝试以写入模式打开文件，如果失败则表示文件正在使用
-    const fd = fs.openSync(filePath, 'r+');
+    // 尝试以只读模式打开文件，检查文件是否存在和基本访问权限
+    fd = fs.openSync(filePath, 'r');
     fs.closeSync(fd);
+    fd = null;
+    
+    // 尝试以写入模式打开文件，检查文件是否正在被其他进程占用
+    fd = fs.openSync(filePath, 'r+');
+    fs.closeSync(fd);
+    fd = null;
+    
+    // 尝试以独占锁模式打开文件，检查文件是否被锁定
+    fd = fs.openSync(filePath, 'w', 0o666);
+    fs.closeSync(fd);
+    fd = null;
+    
+    // 所有尝试都成功，文件未被使用
+    logger.debug(`文件未被使用: ${filePath}`);
     return false;
   } catch (error) {
-    // 权限错误或文件正在使用时都会返回true
-    return true;
+    // 确保文件描述符被正确关闭
+    if (fd !== null) {
+      try {
+        fs.closeSync(fd);
+      } catch (closeError) {
+        // 忽略关闭错误
+      }
+    }
+    
+    // 区分不同类型的错误
+    const errorCode = error.code;
+    const errorNumber = error.errno;
+    
+    // 根据错误类型判断文件是否正在使用
+    // 参考: https://nodejs.org/api/errors.html#system-errors
+    switch (errorCode) {
+      case 'EBUSY': // 设备或资源忙
+      case 'EAGAIN': // 资源暂时不可用
+      case 'ETXTBSY': // 文本文件忙
+      case 'EMFILE': // 打开的文件过多
+      case 'ENFILE': // 系统打开的文件过多
+      case 'ESHUTDOWN': // 传输端点已经关闭
+      case 'EPIPE': // 管道破裂
+        logger.warn(`文件正在使用: ${filePath}`, { error: errorCode, errno: errorNumber });
+        return true;
+        
+      case 'EACCES': // 权限错误
+      case 'EPERM': // 操作不允许
+      case 'ENOENT': // 文件不存在
+        logger.debug(`文件未被使用（非占用原因）: ${filePath}`, { error: errorCode, errno: errorNumber });
+        return false;
+        
+      default:
+        // 其他错误，记录详细信息以便分析
+        logger.warn(`文件访问错误: ${filePath}`, { error: errorCode, errno: errorNumber, message: error.message });
+        // 对于未知错误，保守处理，假设文件正在使用
+        return true;
+    }
   }
 };
 
@@ -111,9 +170,10 @@ const deleteFile = (filePath) => {
 /**
  * 清理单个文件夹
  * @param {string} folderPath - 文件夹路径
+ * @param {number} retentionDays - 保留天数
  * @returns {Object} - 清理结果统计
  */
-const cleanFolder = (folderPath) => {
+const cleanFolder = (folderPath, retentionDays) => {
   let totalFiles = 0;
   let deletedFiles = 0;
   let skippedFiles = 0;
@@ -145,8 +205,8 @@ const cleanFolder = (folderPath) => {
         // 先检查是否为文件夹
         const stats = fs.statSync(filePath);
         if (stats.isDirectory()) {
-          // 递归清理子文件夹
-          const subFolderResult = cleanFolder(filePath);
+          // 递归清理子文件夹，传递相同的保留天数
+          const subFolderResult = cleanFolder(filePath, retentionDays);
           totalFiles += subFolderResult.totalFiles;
           deletedFiles += subFolderResult.deletedFiles;
           skippedFiles += subFolderResult.skippedFiles;
@@ -164,7 +224,7 @@ const cleanFolder = (folderPath) => {
         }
         
         // 检查文件是否超过保留天数
-        if (!isExpired(filePath, config.retentionDays)) {
+        if (!isExpired(filePath, retentionDays)) {
           logger.info(`文件未过期，跳过删除: ${filePath}`);
           skippedFiles++;
           continue;
@@ -205,10 +265,11 @@ const cleanFolder = (folderPath) => {
 /**
  * 执行清理任务
  * @param {Array<string>} folders - 要清理的文件夹路径数组
+ * @param {number} retentionDays - 保留天数
  * @returns {Object} - 总清理结果统计
  */
-const executeCleanup = (folders) => {
-  logger.info('开始执行清理任务');
+const executeCleanup = (folders, retentionDays) => {
+  logger.info('开始执行清理任务', { retentionDays });
   
   let totalTotalFiles = 0;
   let totalDeletedFiles = 0;
@@ -216,7 +277,7 @@ const executeCleanup = (folders) => {
   
   // 遍历所有目标文件夹
   for (const folder of folders) {
-    const result = cleanFolder(folder);
+    const result = cleanFolder(folder, retentionDays);
     totalTotalFiles += result.totalFiles;
     totalDeletedFiles += result.deletedFiles;
     totalSkippedFiles += result.skippedFiles;
@@ -225,7 +286,8 @@ const executeCleanup = (folders) => {
   logger.info('清理任务执行完成', {
     totalFiles: totalTotalFiles,
     deletedFiles: totalDeletedFiles,
-    skippedFiles: totalSkippedFiles
+    skippedFiles: totalSkippedFiles,
+    retentionDays
   });
   
   return {
@@ -235,4 +297,4 @@ const executeCleanup = (folders) => {
   };
 };
 
-export { executeCleanup };
+export { executeCleanup, isExpired };

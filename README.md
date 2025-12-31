@@ -220,7 +220,7 @@ npm start
 
 ## 许可证
 
-MIT License
+Apache2.0 License
 
 ## 作者
 
@@ -231,20 +231,3 @@ whmyxh <hmyxhxjr@qq.com>
 - [GitHub 仓库](https://github.com/whmyxh/file-cleanup-cli.git)
 - [问题反馈](https://github.com/whmyxh/file-cleanup-cli/issues)
 
-## 更新日志
-
-### v1.1.0 (2025-12-31)
-
-- ✨ **递归清理功能** - 自动清理子文件夹中的符合条件文件
-- 🎯 **改进的文件时间判断** - 同时检查创建时间和修改时间
-- 🛡️ **文件使用检查** - 避免删除正在使用的文件
-- 📝 **更新文档** - 完善README.md文件
-
-### v1.0.0 (2025-12-30)
-
-- 初始版本发布
-- 支持基于配置的文件清理
-- 支持文件格式限制
-- 支持多文件夹管理
-- 支持全局安装
-- 完整的日志记录功能
