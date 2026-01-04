@@ -45,15 +45,16 @@ const config = loadConfig();
 
 /**
  * 解析命令行参数
- * @returns {Object} - 解析后的参数对象
+ * @returns {Object} - 解析后的参数对象，包含错误信息（如果有）
  */
 const parseArguments = () => {
   const args = process.argv.slice(2);
   const result = {
     retentionDays: config.retentionDays,
-    action: args.length === 0 ? 'help' : 'cleanup',
+    action: 'help',
     configPath: null,
-    configNewPath: null
+    configNewPath: null,
+    error: null
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -66,8 +67,22 @@ const parseArguments = () => {
         const days = parseInt(nextArg);
         if (!isNaN(days) && days >= 0) {
           result.retentionDays = days;
+        } else {
+          result.error = {
+            type: 'invalid',
+            option: '--days',
+            message: '天数参数必须是一个非负整数'
+          };
+          return result;
         }
         i++;
+      } else {
+        result.error = {
+          type: 'missing',
+          option: '--days',
+          message: '--days 选项需要提供一个非负整数参数'
+        };
+        return result;
       }
     }
     
@@ -78,6 +93,13 @@ const parseArguments = () => {
       if (nextArg && !nextArg.startsWith('-')) {
         result.configPath = nextArg;
         i++;
+      } else {
+        result.error = {
+          type: 'missing',
+          option: '--add',
+          message: '--add 选项需要提供一个文件夹路径参数'
+        };
+        return result;
       }
     }
     
@@ -88,6 +110,13 @@ const parseArguments = () => {
       if (nextArg && !nextArg.startsWith('-')) {
         result.configPath = nextArg;
         i++;
+      } else {
+        result.error = {
+          type: 'missing',
+          option: '--remove',
+          message: '--remove 选项需要提供一个文件夹路径参数'
+        };
+        return result;
       }
     }
     
@@ -98,11 +127,25 @@ const parseArguments = () => {
       if (nextArg && !nextArg.startsWith('-')) {
         result.configPath = nextArg;
         i++;
-      }
-      const nextNextArg = args[i + 1];
-      if (nextNextArg && !nextNextArg.startsWith('-')) {
-        result.configNewPath = nextNextArg;
-        i++;
+        const nextNextArg = args[i + 1];
+        if (nextNextArg && !nextNextArg.startsWith('-')) {
+          result.configNewPath = nextNextArg;
+          i++;
+        } else {
+          result.error = {
+            type: 'missing',
+            option: '--update',
+            message: '--update 选项需要提供两个文件夹路径参数：旧路径和新路径'
+          };
+          return result;
+        }
+      } else {
+        result.error = {
+          type: 'missing',
+          option: '--update',
+          message: '--update 选项需要提供两个文件夹路径参数：旧路径和新路径'
+        };
+        return result;
       }
     }
     
@@ -113,12 +156,12 @@ const parseArguments = () => {
     
     // 解析 --clear 参数（执行文件清理）
     if (arg === '--clear') {
-      result.action = 'cleanup';
+      result.action = 'clear';
     }
     
     // 解析 --configclear 参数（清空所有配置）
     if (arg === '--configclear') {
-      result.action = 'clear';
+      result.action = 'configclear';
     }
     
     // 解析 --help 参数
@@ -155,7 +198,8 @@ const showHelp = () => {
   console.log('用法:');
   console.log('  file-cleanup [选项]');
   console.log('');
-  console.log('清理选项:');
+  console.log('清理操作选项:');
+  console.log('  --clear               执行文件清理操作');
   console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天）');
   console.log('');
   console.log('配置管理选项:');
@@ -164,10 +208,6 @@ const showHelp = () => {
   console.log('  --update <旧路径> <新路径>  修改配置中的文件夹路径（支持绝对路径和相对路径）');
   console.log('  --list                列出所有配置的文件夹');
   console.log('  --configclear         清空所有配置');
-  console.log('');
-  console.log('清理操作选项:');
-  console.log('  --clear               执行文件清理操作');
-  console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天）');
   console.log('');
   console.log('其他选项:');
   console.log('  -h, --help            显示帮助信息');
@@ -181,9 +221,9 @@ const showHelp = () => {
   console.log('');
   console.log('示例:');
   console.log('  # 配置管理（使用绝对路径）');
-  console.log('  file-cleanup --add "E:\temp\logs"');
-  console.log('  file-cleanup --remove "E:\temp\logs"');
-  console.log('  file-cleanup --update "E:\temp\logs" "E:\temp\new_logs"');
+  console.log('  file-cleanup --add "E:/temp/logs"');
+  console.log('  file-cleanup --remove "E:/temp/logs"');
+  console.log('  file-cleanup --update "E:/temp/logs" "E:/temp/new_logs"');
   console.log('  file-cleanup --list');
   console.log('  file-cleanup --configclear');
   console.log('');
@@ -212,6 +252,15 @@ const main = () => {
   // 解析命令行参数
   const params = parseArguments();
   
+  // 检查参数解析错误
+  if (params.error) {
+    console.error('❌ ' + params.error.message);
+    console.log('');
+    console.log('使用 --help 查看详细用法');
+    logger.error(params.error.message);
+    process.exit(1);
+  }
+  
   // 根据操作类型执行不同功能
   switch (params.action) {
     case 'help':
@@ -220,9 +269,11 @@ const main = () => {
       break;
     case 'add':
       // 添加文件夹到配置
+      // 注意：由于在parseArguments中已经验证了--add参数需要路径，这里的检查作为双重保障
       if (!params.configPath) {
-        console.error('错误: 请指定要添加的文件夹路径');
+        console.error('❌ 错误: --add 选项需要提供一个文件夹路径参数');
         console.log('用法: file-cleanup --add <路径>');
+        logger.error('--add 选项缺少文件夹路径参数');
         process.exit(1);
       }
       const addResult = addFolder(params.configPath);
@@ -231,9 +282,11 @@ const main = () => {
       
     case 'remove':
       // 从配置中删除文件夹
+      // 注意：由于在parseArguments中已经验证了--remove参数需要路径，这里的检查作为双重保障
       if (!params.configPath) {
-        console.error('错误: 请指定要删除的文件夹路径');
+        console.error('❌ 错误: --remove 选项需要提供一个文件夹路径参数');
         console.log('用法: file-cleanup --remove <路径>');
+        logger.error('--remove 选项缺少文件夹路径参数');
         process.exit(1);
       }
       const removeResult = removeFolder(params.configPath);
@@ -242,9 +295,11 @@ const main = () => {
       
     case 'update':
       // 修改配置中的文件夹路径
+      // 注意：由于在parseArguments中已经验证了--update参数需要两个路径，这里的检查作为双重保障
       if (!params.configPath || !params.configNewPath) {
-        console.error('错误: 请指定旧路径和新路径');
+        console.error('❌ 错误: --update 选项需要提供两个文件夹路径参数：旧路径和新路径');
         console.log('用法: file-cleanup --update <旧路径> <新路径>');
+        logger.error('--update 选项缺少必要的路径参数');
         process.exit(1);
       }
       const updateResult = updateFolder(params.configPath, params.configNewPath);
@@ -264,7 +319,7 @@ const main = () => {
       }
       process.exit(0);
       
-    case 'clear':
+    case 'configclear':
       // 清空所有配置
       console.log('=== 清空配置操作 ===');
       console.log('确定要清空所有文件夹配置吗？(y/n)');
@@ -296,12 +351,11 @@ const main = () => {
       });
       return;
       
-    case 'cleanup':
-    default:
+    case 'clear':
       // 清理操作
       console.log('=== 文件清理操作 ===');
       console.log('正在准备清理任务...');
-      
+
       // 从配置文件读取文件夹
       const configFolders = getAllFolders();
       if (configFolders.length === 0) {
@@ -313,35 +367,39 @@ const main = () => {
         console.log('  1. 使用 --add 参数添加文件夹到配置');
         console.log('  2. 使用 --list 查看已配置的文件夹');
         console.log('');
-        showHelp();
         console.log('=== 文件清理操作终止 ===');
         process.exit(1);
       }
-      
+
       // 更新配置中的保留天数
       config.retentionDays = params.retentionDays;
-      
+
       console.log(`\n🔍 清理参数:`);
       console.log(`   目标文件夹: ${configFolders.join(', ')}`);
       console.log(`   保留天数: ${params.retentionDays}天`);
       console.log(`   开始时间: ${new Date().toLocaleString()}`);
-      
+
       logger.info(`清理参数: 文件夹=${configFolders.join(', ')}, 保留天数=${params.retentionDays}`);
-      
+
       console.log('\n📦 正在执行清理任务...');
-      
+
       // 执行清理任务
       const result = executeCleanup(configFolders, params.retentionDays);
-      
+
       console.log('\n✅ 文件清理任务完成!');
       console.log(`   总计检查文件: ${result.totalFiles}个`);
       console.log(`   成功删除文件: ${result.deletedFiles}个`);
       console.log(`   跳过文件: ${result.skippedFiles}个`);
       console.log(`   结束时间: ${new Date().toLocaleString()}`);
       console.log('=== 文件清理操作完成 ===');
-      
+
       logger.info('=== 文件清理脚本结束 ===');
       break;
+
+    default:
+      // 默认显示帮助
+      showHelp();
+      process.exit(0);
   }
 };
 

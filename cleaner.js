@@ -46,12 +46,16 @@ const isProtectedFile = (fileName) => {
 };
 
 /**
- * 检查文件扩展名是否允许删除
- * @param {string} fileName - 文件名
- * @returns {boolean} - 是否允许删除
+ * 检查文件扩展名是否在允许删除的列表中
+ * 该函数用于在清理过程中筛选可以删除的文件类型
+ * 
+ * @param {string} fileName - 要检查的文件名（包含扩展名）
+ * @returns {boolean} - 如果文件扩展名在允许列表中返回 true，否则返回 false
  */
 const isAllowedExtension = (fileName) => {
+  // 获取文件扩展名（不含点号），例如：'test.txt' -> 'txt'
   const ext = path.extname(fileName).slice(1);
+  // 检查扩展名是否在配置文件中定义的允许删除列表内
   return config.allowedExtensions.includes(ext);
 };
 

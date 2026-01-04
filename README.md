@@ -12,19 +12,78 @@
 - 🚀 **全局安装** - 全局安装后可在任何位置使用
 - 🔄 **递归清理** - 自动清理子文件夹中的符合条件文件
 - 🔍 **文件使用检查** - 避免删除正在使用的文件
+- 📝 **相对路径支持** - 支持使用相对路径配置清理文件夹
 
 ## 安装
 
-### 全局安装
+### 环境要求
+
+- **Node.js**: >= 22.0.0
+- **npm**: >= 10.0.0 (通常随 Node.js 一起安装)
+- **操作系统**: Windows / macOS / Linux
+
+### 前置依赖
+
+在安装本工具前，请确保您的系统已经安装了以下软件：
+
+1. **Node.js** - 您可以从 [Node.js 官网](https://nodejs.org/) 下载并安装最新版本
+2. **npm** - 通常随 Node.js 一起安装，也可以通过 `npm install -g npm@latest` 更新到最新版本
+
+### 验证前置依赖
+
+在开始安装前，建议先验证 Node.js 和 npm 是否正确安装：
 
 ```bash
-npm install -g file-cleanup-cli
+# 检查 Node.js 版本
+node -v
+
+# 检查 npm 版本
+npm -v
 ```
 
-### 本地安装
+如果命令执行成功并显示版本号，说明前置依赖已经准备就绪。
+
+### 安装方式
+
+####  本地安装
+
+本地安装仅在当前项目目录下可用，通常用于项目集成或开发场景。
 
 ```bash
-npm install file-cleanup-cli
+# 进入您的项目目录
+cd /path/to/your/project
+
+# 安装到本地项目
+npm install -g .
+
+```
+
+### 验证安装成功
+
+安装完成后，可以通过以下方式验证安装是否成功：
+
+#### 验证全局安装
+
+```bash
+# 检查工具版本
+file-cleanup --version
+
+# 查看帮助信息
+file-cleanup --help
+```
+
+如果命令执行成功并显示版本信息或帮助文档，说明全局安装成功。
+
+
+
+
+### 卸载工具
+
+如果您需要卸载本工具，可以使用以下命令：
+
+```bash
+# 卸载全局安装的工具
+npm uninstall -g file-cleanup-cli
 ```
 
 ## 使用方法
@@ -37,17 +96,18 @@ file-cleanup [选项]
 
 ### 命令选项
 
-#### 清理选项
+#### 清理操作选项
 
 - `-d, --days <天数>` - 指定文件保留天数（默认: 7天）
+- `--clear` - 执行文件清理操作
 
 #### 配置管理选项
 
-- `--add <路径>` - 添加文件夹到配置
-- `--remove <路径>` - 从配置中删除文件夹
-- `--update <旧路径> <新路径>` - 修改配置中的文件夹路径
+- `--add <路径>` - 添加文件夹到配置（支持绝对路径和相对路径）
+- `--remove <路径>` - 从配置中删除文件夹（支持绝对路径和相对路径）
+- `--update <旧路径> <新路径>` - 修改配置中的文件夹路径（支持绝对路径和相对路径）
 - `--list` - 列出所有配置的文件夹
-- `--clear` - 清空所有配置
+- `--configclear` - 清空所有配置
 
 #### 其他选项
 
@@ -56,24 +116,37 @@ file-cleanup [选项]
 
 ## 使用示例
 
-### 配置管理
+### 配置管理（添加、删除、修改文件夹）
 
 #### 添加文件夹到配置
 
 ```bash
+# 使用绝对路径
 file-cleanup --add "E:\temp\logs"
+
+# 使用相对路径
+file-cleanup --add ./logs
+file-cleanup --add ../temp/files
 ```
 
 #### 从配置中删除文件夹
 
 ```bash
+# 使用绝对路径
 file-cleanup --remove "E:\temp\logs"
+
+# 使用相对路径
+file-cleanup --remove ./logs
 ```
 
 #### 修改配置中的文件夹路径
 
 ```bash
+# 使用绝对路径
 file-cleanup --update "E:\temp\logs" "E:\temp\new_logs"
+
+# 使用相对路径
+file-cleanup --update ./old-folder ./new-folder
 ```
 
 #### 列出所有配置的文件夹
@@ -85,7 +158,7 @@ file-cleanup --list
 #### 清空所有配置
 
 ```bash
-file-cleanup --clear
+file-cleanup --configclear
 ```
 
 ### 执行清理
@@ -93,13 +166,13 @@ file-cleanup --clear
 #### 使用默认保留天数（7天）
 
 ```bash
-file-cleanup
+file-cleanup --clear
 ```
 
 #### 指定保留天数
 
 ```bash
-file-cleanup --days 30
+file-cleanup --clear --days 30
 ```
 
 ## 配置文件
@@ -182,9 +255,20 @@ folders:
 - 操作详情
 - 错误信息（如有）
 
+## 相对路径使用说明
+
+工具支持使用相对路径配置清理文件夹，路径解析规则如下：
+
+- 当前目录相对路径：`./subfolder`, `./file.txt`
+- 上级目录相对路径：`../parentfolder`, `../../grandparentfolder`
+- 多级相对路径：`./subfolder1/subfolder2`, `../parentfolder/subfolder`
+
+**注意**：相对路径会自动转换为绝对路径存储在配置文件中
+
 ## 系统要求
 
-- Node.js >= 14.0.0
+- Node.js >= 22.0.0
+- npm >= 10.0.0
 - Windows / macOS / Linux
 
 ## 开发
@@ -202,11 +286,6 @@ cd file-cleanup-cli
 npm install
 ```
 
-### 运行测试
-
-```bash
-npm test
-```
 
 ### 本地开发模式
 

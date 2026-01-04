@@ -1,6 +1,6 @@
 {
   "name": "file-cleanup-cli",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "一个功能强大的文件清理命令行工具，支持基于配置的自动清理、文件格式限制和灵活的文件夹管理",
   "main": "app.js",
   "bin": {
@@ -20,10 +20,10 @@
     "cleanup-tool"
   ],
   "author": "whmyxh <hmyxhxjr@qq.com>",
-  "license": "MIT",
+  "license": "Apache 2.0",
   "type": "module",
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=22.0.0"
   },
   "files": [
     "bin/",
