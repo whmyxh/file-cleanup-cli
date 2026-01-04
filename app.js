@@ -54,7 +54,8 @@ const parseArguments = () => {
     action: 'help',
     configPath: null,
     configNewPath: null,
-    error: null
+    error: null,
+    force: false
   };
   
   for (let i = 0; i < args.length; i++) {
@@ -174,6 +175,11 @@ const parseArguments = () => {
     if (arg === '--version' || arg === '-v') {
       showVersion();
       process.exit(0);
+    }
+    
+    // 解析 --force 参数（测试用：跳过确认提示）
+    if (arg === '--force') {
+      result.force = true;
     }
   }
   
@@ -384,7 +390,7 @@ const main = () => {
       logger.info(`清理参数: 文件夹=${configFolders.join(', ')}, 保留天数=${params.retentionDays}, 允许的扩展名=${config.allowedExtensions.join(', ')}`);
 
       // 当配置为删除所有文件（"*"）时，添加确认机制
-      if (config.allowedExtensions.includes('*')) {
+      if (config.allowedExtensions.includes('*') && !params.force) {
         console.log('\n⚠️  警告: 检测到通配符配置（"*"），将删除所有文件类型！');
         console.log('   此操作可能会导致大量文件被删除，建议谨慎执行。');
         console.log('   请确认是否继续执行？(y/n)');
