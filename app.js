@@ -178,7 +178,7 @@ const parseArguments = () => {
     }
     
     // 解析 --force 参数（测试用：跳过确认提示）
-    if (arg === '--force') {
+    if (arg === '--force' || arg === '-f') {
       result.force = true;
     }
   }
@@ -207,6 +207,7 @@ const showHelp = () => {
   console.log('清理操作选项:');
   console.log('  --clear               执行文件清理操作');
   console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天），必须与--clear参数搭配使用才能生效');
+  console.log('  -f, --force           跳过所有确认提示，直接执行相应操作');
   console.log('');
   console.log('配置管理选项:');
   console.log('  --add <路径>          添加文件夹到配置（支持绝对路径和相对路径）');
@@ -329,34 +330,53 @@ const main = () => {
     case 'configclear':
       // 清空所有配置
       console.log('=== 清空配置操作 ===');
-      console.log('确定要清空所有文件夹配置吗？(y/n)');
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-      rl.question('', (answer) => {
-        rl.close();
+      
+      // 如果使用--force参数，直接执行清空操作
+      if (params.force) {
+        console.log('使用--force参数，跳过确认提示');
+        console.log('正在清空所有文件夹配置...');
+        const clearResult = clearAllFolders();
         console.log('');
-        if (answer.toLowerCase() === 'y') {
-          console.log('正在清空所有文件夹配置...');
-          const clearResult = clearAllFolders();
-          console.log('');
-          if (clearResult.success) {
-            console.log('✅ ' + clearResult.message);
-            console.log('=== 清空配置操作完成 ===');
-            process.exit(0);
-          } else {
-            console.log('❌ ' + clearResult.message);
-            console.log('=== 清空配置操作失败 ===');
-            process.exit(1);
-          }
-        } else {
-          console.log('❌ 操作已取消');
-          console.log('=== 清空配置操作终止 ===');
+        if (clearResult.success) {
+          console.log('✅ ' + clearResult.message);
+          console.log('=== 清空配置操作完成 ===');
           process.exit(0);
+        } else {
+          console.log('❌ ' + clearResult.message);
+          console.log('=== 清空配置操作失败 ===');
+          process.exit(1);
         }
-      });
-      return;
+      } else {
+        // 否则显示确认提示
+        console.log('确定要清空所有文件夹配置吗？(y/n)');
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        rl.question('', (answer) => {
+          rl.close();
+          console.log('');
+          if (answer.toLowerCase() === 'y') {
+            console.log('正在清空所有文件夹配置...');
+            const clearResult = clearAllFolders();
+            console.log('');
+            if (clearResult.success) {
+              console.log('✅ ' + clearResult.message);
+              console.log('=== 清空配置操作完成 ===');
+              process.exit(0);
+            } else {
+              console.log('❌ ' + clearResult.message);
+              console.log('=== 清空配置操作失败 ===');
+              process.exit(1);
+            }
+          } else {
+            console.log('❌ 操作已取消');
+            console.log('=== 清空配置操作终止 ===');
+            process.exit(0);
+          }
+        });
+        return;
+      }
       
     case 'clear':
       // 清理操作
