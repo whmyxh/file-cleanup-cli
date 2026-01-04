@@ -200,7 +200,7 @@ const showHelp = () => {
   console.log('');
   console.log('清理操作选项:');
   console.log('  --clear               执行文件清理操作');
-  console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天）');
+  console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天），必须与--clear参数搭配使用才能生效');
   console.log('');
   console.log('配置管理选项:');
   console.log('  --add <路径>          添加文件夹到配置（支持绝对路径和相对路径）');
@@ -239,6 +239,7 @@ const showHelp = () => {
   console.log('注意事项:');
   console.log('  - 当未指定任何选项时，默认显示此帮助文档');
   console.log('  - 清理操作仅在配置了文件夹且使用了相关选项时执行');
+  console.log('  - -d, --days 参数必须与 --clear 参数搭配使用才能生效');
   console.log('  - 系统会自动跳过正在使用的文件，避免因删除正在使用的文件导致系统错误');
   console.log('');
 };
@@ -377,9 +378,50 @@ const main = () => {
       console.log(`\n🔍 清理参数:`);
       console.log(`   目标文件夹: ${configFolders.join(', ')}`);
       console.log(`   保留天数: ${params.retentionDays}天`);
+      console.log(`   允许删除的文件类型: ${config.allowedExtensions.join(', ')}`);
       console.log(`   开始时间: ${new Date().toLocaleString()}`);
 
-      logger.info(`清理参数: 文件夹=${configFolders.join(', ')}, 保留天数=${params.retentionDays}`);
+      logger.info(`清理参数: 文件夹=${configFolders.join(', ')}, 保留天数=${params.retentionDays}, 允许的扩展名=${config.allowedExtensions.join(', ')}`);
+
+      // 当配置为删除所有文件（"*"）时，添加确认机制
+      if (config.allowedExtensions.includes('*')) {
+        console.log('\n⚠️  警告: 检测到通配符配置（"*"），将删除所有文件类型！');
+        console.log('   此操作可能会导致大量文件被删除，建议谨慎执行。');
+        console.log('   请确认是否继续执行？(y/n)');
+        
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout
+        });
+        
+        rl.question('', (answer) => {
+          rl.close();
+          console.log('');
+          
+          if (answer.toLowerCase() === 'y') {
+            console.log('📦 正在执行清理任务...');
+            // 执行清理任务
+            const result = executeCleanup(configFolders, params.retentionDays);
+            
+            console.log('\n✅ 文件清理任务完成!');
+            console.log(`   总计检查文件: ${result.totalFiles}个`);
+            console.log(`   成功删除文件: ${result.deletedFiles}个`);
+            console.log(`   跳过文件: ${result.skippedFiles}个`);
+            console.log(`   结束时间: ${new Date().toLocaleString()}`);
+            console.log('=== 文件清理操作完成 ===');
+            
+            logger.info('=== 文件清理脚本结束 ===');
+            process.exit(0);
+          } else {
+            console.log('❌ 操作已取消');
+            console.log('=== 文件清理操作终止 ===');
+            logger.info('清理操作已被用户取消');
+            process.exit(0);
+          }
+        });
+        
+        return;
+      }
 
       console.log('\n📦 正在执行清理任务...');
 

@@ -53,6 +53,11 @@ const isProtectedFile = (fileName) => {
  * @returns {boolean} - 如果文件扩展名在允许列表中返回 true，否则返回 false
  */
 const isAllowedExtension = (fileName) => {
+  // 检查是否配置了"*"作为通配符（代表所有文件类型）
+  if (config.allowedExtensions.includes('*')) {
+    return true;
+  }
+  
   // 获取文件扩展名（不含点号），例如：'test.txt' -> 'txt'
   const ext = path.extname(fileName).slice(1);
   // 检查扩展名是否在配置文件中定义的允许删除列表内
@@ -274,6 +279,40 @@ const cleanFolder = (folderPath, retentionDays) => {
  */
 const executeCleanup = (folders, retentionDays) => {
   logger.info('开始执行清理任务', { retentionDays });
+  
+  // 安全检查：当配置为删除所有文件（"*"）时的额外验证
+  if (config.allowedExtensions.includes('*')) {
+    logger.warn('检测到通配符配置（"*"），将删除所有文件类型！', {
+      allowedExtensions: config.allowedExtensions
+    });
+    
+    // 安全检查1：确保清理路径不是系统关键路径
+    const criticalPaths = [
+      'c:\\', 'c:\\windows', 'c:\\system32', 'c:\\program files',
+      'c:\\program files (x86)', 'c:\\users', 'c:\\programdata',
+      'd:\\', 'e:\\' // 根目录也需要特别注意
+    ];
+    
+    for (const folder of folders) {
+      const folderLower = folder.toLowerCase();
+      for (const criticalPath of criticalPaths) {
+        if (folderLower === criticalPath || folderLower.startsWith(criticalPath + '\\')) {
+          logger.error('安全检查失败：禁止在系统关键路径上执行全文件删除操作！', {
+            folder: folder,
+            criticalPath: criticalPath
+          });
+          throw new Error(`禁止在系统关键路径 ${folder} 上执行全文件删除操作`);
+        }
+      }
+    }
+    
+    // 安全检查2：确保保留天数不为0，避免立即删除所有文件
+    if (retentionDays === 0) {
+      logger.warn('警告：保留天数设置为0，将删除所有符合条件的文件！', {
+        retentionDays: 0
+      });
+    }
+  }
   
   let totalTotalFiles = 0;
   let totalDeletedFiles = 0;
