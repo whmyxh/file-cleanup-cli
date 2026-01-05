@@ -1,6 +1,6 @@
 {
   "name": "file-cleanup-cli",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "一个功能强大的文件清理命令行工具，支持基于配置的自动清理、文件格式限制和灵活的文件夹管理",
   "main": "app.js",
   "bin": {

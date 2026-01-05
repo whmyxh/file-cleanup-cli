@@ -20,7 +20,7 @@
 
 - **Node.js**: >= 22.0.0
 - **npm**: >= 10.0.0 (通常随 Node.js 一起安装)
-- **操作系统**: Windows / macOS / Linux
+- **操作系统**: Windows 10 或以上版本
 
 ### 前置依赖
 
@@ -284,7 +284,7 @@ folders:
    - 支持通配符 `*` 表示所有文件类型
 
 3. **系统保护** - 自动跳过系统保护文件
-   - 保护系统关键文件如 `desktop.ini`, `thumbs.db` 等
+   - 保护系统关键文件如 `desktop.ini`, `thumbs.db`,系统根目录等
    - 可在配置文件中扩展保护文件列表
 
 4. **文件使用检查** - 避免删除正在使用的文件
@@ -323,7 +323,7 @@ folders:
 
 - Node.js >= 22.0.0
 - npm >= 10.0.0
-- Windows / macOS / Linux
+- Windows 10 或以上版本
 
 ## 开发
 
