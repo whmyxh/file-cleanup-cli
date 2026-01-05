@@ -214,7 +214,7 @@ const showHelp = () => {
   console.log('  --remove <路径>       从配置中删除文件夹（支持绝对路径和相对路径）');
   console.log('  --update <旧路径> <新路径>  修改配置中的文件夹路径（支持绝对路径和相对路径）');
   console.log('  --list                列出所有配置的文件夹');
-  console.log('  --configclear         清空所有配置');
+  console.log('  --configclear         清空所有文件夹配置');
   console.log('');
   console.log('其他选项:');
   console.log('  -h, --help            显示帮助信息');
@@ -254,7 +254,7 @@ const showHelp = () => {
 /**
  * 主函数
  */
-const main = () => {
+const main = async () => {
   logger.info('=== 文件清理脚本启动 ===');
   
   // 解析命令行参数
@@ -404,15 +404,15 @@ const main = () => {
       console.log(`\n🔍 清理参数:`);
       console.log(`   目标文件夹: ${configFolders.join(', ')}`);
       console.log(`   保留天数: ${params.retentionDays}天`);
-      console.log(`   允许删除的文件类型: ${config.allowedExtensions.join(', ')}`);
+      console.log(`   允许处理的文件类型: ${config.allowedExtensions.join(', ')}`);
       console.log(`   开始时间: ${new Date().toLocaleString()}`);
 
       logger.info(`清理参数: 文件夹=${configFolders.join(', ')}, 保留天数=${params.retentionDays}, 允许的扩展名=${config.allowedExtensions.join(', ')}`);
 
-      // 当配置为删除所有文件（"*"）时，添加确认机制
+      // 当配置为处理所有文件（"*"）时，添加确认机制
       if (config.allowedExtensions.includes('*') && !params.force) {
-        console.log('\n⚠️  警告: 检测到通配符配置（"*"），将删除所有文件类型！');
-        console.log('   此操作可能会导致大量文件被删除，建议谨慎执行。');
+        console.log('\n⚠️  警告: 检测到通配符配置（"*"），将处理所有文件类型！');
+        console.log('   此操作可能会导致大量文件被移动，建议谨慎执行。');
         console.log('   请确认是否继续执行？(y/n)');
         
         const rl = readline.createInterface({
@@ -420,19 +420,27 @@ const main = () => {
           output: process.stdout
         });
         
-        rl.question('', (answer) => {
+        rl.question('', async (answer) => {
           rl.close();
           console.log('');
           
           if (answer.toLowerCase() === 'y') {
             console.log('📦 正在执行清理任务...');
             // 执行清理任务
-            const result = executeCleanup(configFolders, params.retentionDays);
+            const result = await executeCleanup(configFolders, params.retentionDays);
             
             console.log('\n✅ 文件清理任务完成!');
             console.log(`   总计检查文件: ${result.totalFiles}个`);
-            console.log(`   成功删除文件: ${result.deletedFiles}个`);
+            console.log(`   成功移动文件: ${result.movedFiles}个`);
             console.log(`   跳过文件: ${result.skippedFiles}个`);
+            
+            if (result.compression && result.compression.success) {
+              console.log(`   压缩包: ${result.compression.outputPath}`);
+              console.log(`   压缩文件数: ${result.compression.fileCount}个`);
+              console.log(`   压缩前大小: ${result.compression.totalSize}`);
+              console.log(`   压缩后大小: ${result.compression.compressedSize}`);
+            }
+            
             console.log(`   结束时间: ${new Date().toLocaleString()}`);
             console.log('=== 文件清理操作完成 ===');
             
@@ -452,12 +460,20 @@ const main = () => {
       console.log('\n📦 正在执行清理任务...');
 
       // 执行清理任务
-      const result = executeCleanup(configFolders, params.retentionDays);
+      const result = await executeCleanup(configFolders, params.retentionDays);
 
       console.log('\n✅ 文件清理任务完成!');
       console.log(`   总计检查文件: ${result.totalFiles}个`);
-      console.log(`   成功删除文件: ${result.deletedFiles}个`);
+      console.log(`   成功移动文件: ${result.movedFiles}个`);
       console.log(`   跳过文件: ${result.skippedFiles}个`);
+      
+      if (result.compression && result.compression.success) {
+        console.log(`   压缩包: ${result.compression.outputPath}`);
+        console.log(`   压缩文件数: ${result.compression.fileCount}个`);
+        console.log(`   压缩前大小: ${result.compression.totalSize}`);
+        console.log(`   压缩后大小: ${result.compression.compressedSize}`);
+      }
+      
       console.log(`   结束时间: ${new Date().toLocaleString()}`);
       console.log('=== 文件清理操作完成 ===');
 
@@ -472,4 +488,8 @@ const main = () => {
 };
 
 // 启动脚本
-main();
+main().catch(error => {
+  logger.error(`程序执行错误: ${error.message}`);
+  console.error('程序执行错误:', error.message);
+  process.exit(1);
+});

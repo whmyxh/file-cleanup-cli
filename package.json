@@ -1,6 +1,6 @@
 {
   "name": "file-cleanup-cli",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "一个功能强大的文件清理命令行工具，支持基于配置的自动清理、文件格式限制和灵活的文件夹管理",
   "main": "app.js",
   "bin": {
@@ -43,6 +43,7 @@
     "url": "https://github.com/whmyxh/file-cleanup-cli/issues"
   },
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "fs-extra": "^11.3.3",
     "js-yaml": "^4.1.1",
     "winston": "^3.19.0"

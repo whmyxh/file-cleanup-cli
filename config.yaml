@@ -2,10 +2,9 @@
 # 定义清理规则和保留策略
 
 # 默认文件保留天数（单位：天）
-retentionDays: 7
+retentionDays: 0
 
 # 允许删除的文件扩展名列表（区分大小写）
-# 使用通配符"*"表示允许删除所有文件类型
 allowedExtensions:
   - docx
   - xlsx
@@ -35,3 +34,14 @@ logConfig:
 # 要清理的文件夹列表（绝对路径）
 folders:
 
+
+# 文件移动配置
+moveConfig:
+  # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）
+  targetDirectory: trash
+  # 是否在移动完成后自动压缩
+  enableCompression: true
+  # 压缩包名称前缀
+  compressionPrefix: custom_cleanup_
+  # 压缩完成后是否删除源文件（移动目录中的文件）
+  deleteAfterCompression: true

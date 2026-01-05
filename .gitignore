@@ -60,3 +60,6 @@ temp/
 .fusebox/
 .dynamodb/
 .tern-port
+
+.trae/documents/
+*trash/

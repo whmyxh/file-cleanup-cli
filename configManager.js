@@ -92,7 +92,7 @@ const loadConfig = () => {
  */
 const saveConfig = (folders) => {
   try {
-    // 读取现有配置值
+    // 读取现有配置（如果存在）
     let config = {
       retentionDays: 7,
       allowedExtensions: ['docx', 'xlsx', 'csv', 'pptx', 'txt'],
@@ -102,18 +102,17 @@ const saveConfig = (folders) => {
         filePath: 'logs/cleanup.log',
         maxSize: 10,
         maxFiles: 5
-      }
+      },
+      folders: []
     };
     
     if (fs.existsSync(CONFIG_FILE)) {
       const data = fs.readFileSync(CONFIG_FILE, 'utf8');
       const loadedConfig = yaml.load(data) || {};
-      // 合并现有配置值
+      // 保留所有现有配置值，只覆盖默认配置中有的字段
       config = {
-        retentionDays: loadedConfig.retentionDays || config.retentionDays,
-        allowedExtensions: loadedConfig.allowedExtensions || config.allowedExtensions,
-        protectedFiles: loadedConfig.protectedFiles || config.protectedFiles,
-        logConfig: loadedConfig.logConfig || config.logConfig
+        ...config,
+        ...loadedConfig
       };
     }
     
@@ -121,7 +120,7 @@ const saveConfig = (folders) => {
     config.folders = folders;
     
     // 创建带注释的YAML内容
-    const yamlContent = `# 清理脚本配置文件
+    let yamlContent = `# 清理脚本配置文件
 # 定义清理规则和保留策略
 
 # 默认文件保留天数（单位：天）
@@ -150,6 +149,35 @@ logConfig:
 folders:
 ${config.folders.map(folder => `  - "${folder.replace(/\\/g, '\\\\')}"`).join('\n')}
 `;
+
+    // 添加moveConfig配置（如果存在）
+    if (config.moveConfig) {
+      yamlContent += `
+# 文件移动配置
+moveConfig:
+  # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）
+  targetDirectory: ${config.moveConfig.targetDirectory}
+`;
+      
+      // 添加其他moveConfig选项（如果存在）
+      if (config.moveConfig.enableCompression !== undefined) {
+        yamlContent += `  # 是否在移动完成后自动压缩
+  enableCompression: ${config.moveConfig.enableCompression}
+`;
+      }
+      
+      if (config.moveConfig.compressionPrefix) {
+        yamlContent += `  # 压缩包名称前缀
+  compressionPrefix: ${config.moveConfig.compressionPrefix}
+`;
+      }
+      
+      if (config.moveConfig.deleteAfterCompression !== undefined) {
+        yamlContent += `  # 压缩完成后是否删除源文件（移动目录中的文件）
+  deleteAfterCompression: ${config.moveConfig.deleteAfterCompression}
+`;
+      }
+    }
     
     // 保存配置到YAML文件
     fs.writeFileSync(CONFIG_FILE, yamlContent, 'utf8');
