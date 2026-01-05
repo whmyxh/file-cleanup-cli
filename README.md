@@ -21,7 +21,7 @@
 
 ### 环境要求
 
-- **Node.js**: >= 22.0.0
+- **Node.js**: >= 22.19.0
 - **npm**: >= 10.0.0 (通常随 Node.js 一起安装)
 - **操作系统**: Windows 10 或以上版本
 
@@ -141,7 +141,7 @@ file-cleanup [选项]
    file-cleanup --clear --days 30
    ```
 
-3. **通配符清理（跳过确认）** - 当配置文件中allowedExtensions设置为"*"且需要跳过确认提示时
+3. **通配符清理（跳过确认）** - 当配置文件中allowedExtensions设置为"*"（必须使用引号包裹）且需要跳过确认提示时
    ```bash
    file-cleanup --clear --force
    ```
@@ -241,16 +241,19 @@ file-cleanup --clear --days 30
 # 定义清理规则和保留策略
 
 # 默认文件保留天数（单位：天）
-retentionDays: 7
+retentionDays: 0
 
 # 允许删除的文件扩展名列表（区分大小写）
-# 支持通配符 `*` 表示所有文件类型
+# 支持通配符 `*` 表示所有文件类型，注意：通配符必须使用引号包裹
 allowedExtensions:
   - docx
   - xlsx
   - csv
   - pptx
   - txt
+  - xls
+  # 允许所有文件类型（必须使用引号包裹通配符）
+  # - "*"
 
 # 系统保护文件列表（文件名，不区分大小写）
 protectedFiles:
@@ -272,7 +275,6 @@ logConfig:
 
 # 要清理的文件夹列表（绝对路径）
 folders:
-  - "E:\js_project\File_Deletion\test_folder_updated"
 
 # 文件移动配置
 moveConfig:
@@ -281,7 +283,7 @@ moveConfig:
   # 是否在移动完成后自动压缩
   enableCompression: true
   # 压缩包名称前缀
-  compressionPrefix: cleanup_
+  compressionPrefix: custom_cleanup_
   # 压缩完成后是否删除源文件（移动目录中的文件）
   deleteAfterCompression: true
 ```
@@ -295,7 +297,7 @@ moveConfig:
 2. **文件格式限制** - 只删除配置中允许的文件格式
    - 通过文件扩展名进行判断（区分大小写）
    - 可以在配置文件中灵活添加或移除支持的格式
-   - 支持通配符 `*` 表示所有文件类型
+   - 支持通配符 `*` 表示所有文件类型（注意：通配符必须使用引号包裹）
 
 3. **系统保护** - 自动跳过系统保护文件
    - 保护系统关键文件如 `desktop.ini`, `thumbs.db`,系统根目录等

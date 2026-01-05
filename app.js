@@ -206,7 +206,7 @@ const showHelp = () => {
   console.log('');
   console.log('清理操作选项:');
   console.log('  --clear               执行文件清理操作');
-  console.log('  -d, --days <天数>     指定文件保留天数（默认: 7天），必须与--clear参数搭配使用才能生效');
+  console.log('  -d, --days <天数>     指定文件保留天数（默认: 0天），必须与--clear参数搭配使用才能生效');
   console.log('  -f, --force           跳过所有确认提示，直接执行相应操作');
   console.log('');
   console.log('配置管理选项:');
@@ -214,11 +214,26 @@ const showHelp = () => {
   console.log('  --remove <路径>       从配置中删除文件夹（支持绝对路径和相对路径）');
   console.log('  --update <旧路径> <新路径>  修改配置中的文件夹路径（支持绝对路径和相对路径）');
   console.log('  --list                列出所有配置的文件夹');
-  console.log('  --configclear         清空所有文件夹配置');
+  console.log('  --configclear         清空所有文件夹配置（保留其他配置项）');
   console.log('');
   console.log('其他选项:');
   console.log('  -h, --help            显示帮助信息');
   console.log('  -v, --version         显示版本信息');
+  console.log('');
+  console.log('功能说明:');
+  console.log('  文件移动配置:');
+  console.log('    - 支持将文件移动到指定目录而非直接删除');
+  console.log('    - 可配置自动压缩功能，减少存储空间占用');
+  console.log('    - 配置文件中moveConfig部分可自定义移动行为');
+  console.log('');
+  console.log('  通配符使用:');
+  console.log('    - 使用 "*" 表示所有文件类型，需在配置文件中用引号包裹');
+  console.log('    - 示例：allowedExtensions: - "*"');
+  console.log('');
+  console.log('  日志配置:');
+  console.log('    - 日志文件默认存储在 logs/cleanup.log');
+  console.log('    - 支持配置日志级别、文件大小和保留数量');
+  console.log('    - 日志级别：error, warn, info, verbose, debug, silly');
   console.log('');
   console.log('相对路径使用说明:');
   console.log('  - 支持当前目录相对路径: ./subfolder, ./file.txt');
@@ -248,6 +263,8 @@ const showHelp = () => {
   console.log('  - 清理操作仅在配置了文件夹且使用了相关选项时执行');
   console.log('  - -d, --days 参数必须与 --clear 参数搭配使用才能生效');
   console.log('  - 系统会自动跳过正在使用的文件，避免因删除正在使用的文件导致系统错误');
+  console.log('  - --configclear 参数仅清空文件夹配置，保留其他所有配置项');
+  console.log('  - 使用通配符 "*" 时需在配置文件中用引号包裹');
   console.log('');
 };
 

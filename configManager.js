@@ -128,7 +128,7 @@ retentionDays: ${config.retentionDays}
 
 # 允许删除的文件扩展名列表（区分大小写）
 allowedExtensions:
-${config.allowedExtensions.map(ext => `  - ${ext}`).join('\n')}
+${config.allowedExtensions.map(ext => `  - ${ext === '*' ? '"*"' : ext}`).join('\n')}
 
 # 系统保护文件列表（文件名，不区分大小写）
 protectedFiles:
