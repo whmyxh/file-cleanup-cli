@@ -1,14 +1,13 @@
 /**
  * 核心清理逻辑模块
  * 实现文件夹遍历、文件检查和文件移动功能
- * 支持将清理的文件移动到指定目录并压缩打包
+ * 支持将清理的文件移动到指定目录
  */
 
 import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
-import AdmZip from 'adm-zip';
 import logger from './logger.js';
 
 /**
@@ -265,186 +264,42 @@ const moveFile = (filePath, targetDir, baseDir) => {
 };
 
 /**
- * 递归添加目录内容到ZIP文件
- * @param {AdmZip} zip - ZIP实例
- * @param {string} sourceDir - 源目录路径
- * @param {string} relativePath - 相对于源目录的路径
- * @returns {Object} - 统计信息 { fileCount: number, totalSize: number, fileList: Array }
+ * 直接删除文件
+ * @param {string} filePath - 要删除的文件路径
+ * @returns {Object} - 删除结果 { success: boolean, fileName: string, fileSize: string, error?: string }
  */
-const addDirectoryToZip = (zip, sourceDir, relativePath = '') => {
-  let stats = { fileCount: 0, totalSize: 0, fileList: [] };
-  
-  const files = fs.readdirSync(sourceDir);
-  
-  for (const file of files) {
-    const filePath = path.join(sourceDir, file);
-    const fileStats = fs.statSync(filePath);
-    const entryPath = relativePath ? path.join(relativePath, file) : file;
+const deleteFile = (filePath) => {
+  try {
+    const stats = fs.statSync(filePath);
+    const fileSize = formatFileSize(stats.size);
+    const fileName = path.basename(filePath);
     
-    if (fileStats.isDirectory()) {
-      // 添加目录到ZIP
-      zip.addFile(entryPath + '/', Buffer.alloc(0));
-      // 递归处理子目录
-      const subDirStats = addDirectoryToZip(zip, filePath, entryPath);
-      stats.fileCount += subDirStats.fileCount;
-      stats.totalSize += subDirStats.totalSize;
-      stats.fileList.push(...subDirStats.fileList);
-    } else if (fileStats.isFile()) {
-      // 获取文件内容
-      const content = fs.readFileSync(filePath);
-      
-      // 添加文件到ZIP，保留原始文件名和属性
-      zip.addFile(entryPath, content, '', 0o644, { 
-        atime: fileStats.atime, 
-        mtime: fileStats.mtime,
-        ctime: fileStats.ctime 
-      });
-      
-      stats.fileCount++;
-      stats.totalSize += fileStats.size;
-      stats.fileList.push({ path: filePath, name: entryPath, size: fileStats.size });
-    }
+    fs.removeSync(filePath);
+    
+    logger.info(`成功删除文件: ${filePath}`, {
+      fileName,
+      filePath,
+      fileSize
+    });
+    
+    return { success: true, fileName, fileSize };
+  } catch (error) {
+    logger.warn(`删除文件失败: ${filePath}`, { error: error.message });
+    return { success: false, fileName: path.basename(filePath), fileSize: '0 B', error: error.message };
   }
-  
-  return stats;
 };
 
-/**
- * 压缩目录为ZIP文件
- * @param {string} sourceDir - 源目录路径
- * @param {string} outputPath - 输出ZIP文件路径
- * @returns {Promise<Object>} - 压缩结果 { success: boolean, outputPath: string, fileCount: number, totalSize: string, error?: string }
- */
-const compressDirectory = async (sourceDir, outputPath) => {
-  const moveConfig = config.moveConfig || {};
-  const deleteAfterCompression = moveConfig.deleteAfterCompression !== false;
-  
-  try {
-    if (!fs.existsSync(sourceDir)) {
-      throw new Error(`源目录不存在: ${sourceDir}`);
-    }
-    
-    // 创建ZIP实例，使用DEFLATE算法
-    const zip = new AdmZip();
-    
-    // 递归添加目录内容到ZIP，保留完整文件结构
-    const stats = addDirectoryToZip(zip, sourceDir);
-    const { fileCount, totalSize, fileList } = stats;
-    
-    if (fileCount === 0) {
-      logger.info(`没有文件需要压缩: ${sourceDir}`);
-      return { success: true, outputPath, fileCount: 0, totalSize: '0 B' };
-    }
-    
-    // 确保输出路径不存在
-    await fs.remove(outputPath);
-    
-    // 压缩到文件，使用DEFLATE算法
-    zip.writeZip(outputPath, (error) => {
-      if (error) {
-        throw error;
-      }
-    });
-    
-    // 验证ZIP文件完整性
-    const zipVerify = new AdmZip(outputPath);
-    const entries = zipVerify.getEntries();
-    let isIntegrityValid = true;
-    
-    for (const entry of entries) {
-      try {
-        if (!entry.isDirectory) {
-          // 尝试读取文件内容来验证完整性
-          const content = entry.getData();
-          // 只要能成功读取内容，就认为完整性有效
-          // 不检查内容长度，因为空文件也是有效的
-        }
-      } catch (error) {
-        isIntegrityValid = false;
-        logger.error(`ZIP文件完整性验证失败: ${entry.entryName}`, { error: error.message });
-      }
-    }
-    
-    if (!isIntegrityValid) {
-      throw new Error('ZIP文件完整性验证失败');
-    }
-    
-    const compressedSize = formatFileSize(fs.statSync(outputPath).size);
-    
-    logger.info(`成功创建压缩包: ${outputPath}`, {
-      fileCount,
-      originalSize: formatFileSize(totalSize),
-      compressedSize,
-      compressionRatio: ((1 - fs.statSync(outputPath).size / totalSize) * 100).toFixed(2) + '%',
-      compressionMethod: 'ZIP (DEFLATE)',
-      integrityVerified: isIntegrityValid
-    });
-    
-    if (deleteAfterCompression) {
-      // 清理移动目录中的源文件和目录
-      try {
-        // 先删除所有文件
-        for (const file of fileList) {
-          try {
-            fs.removeSync(file.path);
-          } catch (error) {
-            logger.warn(`删除源文件失败: ${file.path}`, { error: error.message });
-          }
-        }
-        
-        // 然后递归删除空目录
-        const removeEmptyDirs = (dir) => {
-          if (fs.existsSync(dir)) {
-            const files = fs.readdirSync(dir);
-            if (files.length === 0) {
-              fs.removeSync(dir);
-              return true;
-            } else {
-              files.forEach(file => {
-                const filePath = path.join(dir, file);
-                if (fs.statSync(filePath).isDirectory()) {
-                  removeEmptyDirs(filePath);
-                }
-              });
-              // 检查当前目录是否为空
-              if (fs.readdirSync(dir).length === 0) {
-                fs.removeSync(dir);
-                return true;
-              }
-            }
-          }
-          return false;
-        };
-        
-        removeEmptyDirs(sourceDir);
-        logger.debug(`已清理移动目录中的源文件和空目录: ${sourceDir}`);
-      } catch (error) {
-        logger.warn(`清理源文件失败: ${sourceDir}`, { error: error.message });
-      }
-    }
-    
-    return {
-      success: true,
-      outputPath,
-      fileCount,
-      totalSize: formatFileSize(totalSize),
-      compressedSize,
-      integrityVerified: isIntegrityValid
-    };
-  } catch (error) {
-    logger.error(`压缩失败: ${sourceDir}`, { error: error.message });
-    return { success: false, outputPath: null, fileCount: 0, totalSize: '0 B', error: error.message };
-  }
-};
+
 
 /**
  * 清理单个文件夹
  * @param {string} folderPath - 文件夹路径
  * @param {number} retentionDays - 保留天数
  * @param {string} baseDir - 基础目录路径（用于确定相对路径，默认与folderPath相同）
+ * @param {boolean} forceDelete - 是否直接删除文件（默认false，即移动到垃圾目录）
  * @returns {Object} - 清理结果统计
  */
-const cleanFolder = (folderPath, retentionDays, baseDir = null) => {
+const cleanFolder = (folderPath, retentionDays, baseDir = null, forceDelete = false) => {
   let totalFiles = 0;
   let movedFiles = 0;
   let skippedFiles = 0;
@@ -459,7 +314,7 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null) => {
       return { totalFiles, movedFiles, skippedFiles, movedFileList };
     }
     
-    logger.info(`开始清理文件夹: ${folderPath}`);
+    logger.info(`开始清理文件夹: ${folderPath}`, { forceDelete });
     
     const files = fs.readdirSync(folderPath);
     
@@ -476,7 +331,7 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null) => {
       try {
         const stats = fs.statSync(filePath);
         if (stats.isDirectory()) {
-          const subFolderResult = cleanFolder(filePath, retentionDays, currentBaseDir);
+          const subFolderResult = cleanFolder(filePath, retentionDays, currentBaseDir, forceDelete);
           totalFiles += subFolderResult.totalFiles;
           movedFiles += subFolderResult.movedFiles;
           skippedFiles += subFolderResult.skippedFiles;
@@ -505,24 +360,41 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null) => {
           continue;
         }
         
-        const targetDir = getMoveTargetDirectory();
-        if (!ensureDirectory(targetDir)) {
-          skippedFiles++;
-          continue;
-        }
-        
-        // 传递baseDir以保留完整的目录结构
-        const moveResult = moveFile(filePath, targetDir, currentBaseDir);
-        if (moveResult.success) {
-          movedFiles++;
-          movedFileList.push({
-            sourcePath: filePath,
-            targetPath: moveResult.targetPath,
-            fileName: moveResult.fileName,
-            fileSize: moveResult.fileSize
-          });
+        if (forceDelete) {
+          // 直接删除文件
+          const deleteResult = deleteFile(filePath);
+          if (deleteResult.success) {
+            movedFiles++;
+            movedFileList.push({
+              sourcePath: filePath,
+              targetPath: null,
+              fileName: deleteResult.fileName,
+              fileSize: deleteResult.fileSize
+            });
+          } else {
+            skippedFiles++;
+          }
         } else {
-          skippedFiles++;
+          // 移动文件到垃圾目录
+          const targetDir = getMoveTargetDirectory();
+          if (!ensureDirectory(targetDir)) {
+            skippedFiles++;
+            continue;
+          }
+          
+          // 传递baseDir以保留完整的目录结构
+          const moveResult = moveFile(filePath, targetDir, currentBaseDir);
+          if (moveResult.success) {
+            movedFiles++;
+            movedFileList.push({
+              sourcePath: filePath,
+              targetPath: moveResult.targetPath,
+              fileName: moveResult.fileName,
+              fileSize: moveResult.fileSize
+            });
+          } else {
+            skippedFiles++;
+          }
         }
       } catch (error) {
         logger.error(`处理文件时出错: ${filePath}`, { error: error.message });
@@ -533,7 +405,8 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null) => {
     logger.info(`文件夹清理完成: ${folderPath}`, {
       totalFiles,
       movedFiles,
-      skippedFiles
+      skippedFiles,
+      forceDelete
     });
     
   } catch (error) {
@@ -547,14 +420,13 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null) => {
  * 执行清理任务
  * @param {Array<string>} folders - 要清理的文件夹路径数组
  * @param {number} retentionDays - 保留天数
+ * @param {boolean} forceDelete - 是否直接删除文件（默认false，即移动到垃圾目录）
  * @returns {Promise<Object>} - 总清理结果统计
  */
-const executeCleanup = async (folders, retentionDays) => {
-  logger.info('开始执行清理任务', { retentionDays });
+const executeCleanup = async (folders, retentionDays, forceDelete = false) => {
+  logger.info('开始执行清理任务', { retentionDays, forceDelete });
   
-  const moveConfig = config.moveConfig || {};
-  const enableCompression = moveConfig.enableCompression !== false;
-  const compressionPrefix = moveConfig.compressionPrefix || 'cleanup_';
+  
   
   if (config.allowedExtensions.includes('*')) {
     logger.warn('检测到通配符配置（"*"），将处理所有文件类型！', {
@@ -563,7 +435,7 @@ const executeCleanup = async (folders, retentionDays) => {
     
     const criticalPaths = [
       'c:\\', 'c:\\windows', 'c:\\system32', 'c:\\program files',
-      'c:\\program files (x86)', 'c:\\users', 'c:\\programdata',
+      'c:\\program files (x86)','c:\\programdata',
       'd:\\', 'e:\\'
     ];
     
@@ -593,40 +465,26 @@ const executeCleanup = async (folders, retentionDays) => {
   const allMovedFiles = [];
   
   for (const folder of folders) {
-    const result = cleanFolder(folder, retentionDays);
+    const result = cleanFolder(folder, retentionDays, null, forceDelete);
     totalTotalFiles += result.totalFiles;
     totalMovedFiles += result.movedFiles;
     totalSkippedFiles += result.skippedFiles;
     allMovedFiles.push(...result.movedFileList);
   }
   
-  let compressionResult = null;
-  
-  if (enableCompression && allMovedFiles.length > 0) {
-      const targetDir = getMoveTargetDirectory();
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const zipFileName = `${compressionPrefix}${timestamp}.zip`;
-      const outputPath = path.join(targetDir, zipFileName);
-      
-      logger.info(`开始压缩文件到: ${outputPath}`);
-      
-      compressionResult = await compressDirectory(targetDir, outputPath);
-    }
-  
   logger.info('清理任务执行完成', {
     totalFiles: totalTotalFiles,
     movedFiles: totalMovedFiles,
     skippedFiles: totalSkippedFiles,
     retentionDays,
-    compression: enableCompression ? compressionResult : null
+    forceDelete
   });
   
   return {
     totalFiles: totalTotalFiles,
     movedFiles: totalMovedFiles,
     skippedFiles: totalSkippedFiles,
-    movedFilesList: allMovedFiles,
-    compression: compressionResult
+    movedFilesList: allMovedFiles
   };
 }
 

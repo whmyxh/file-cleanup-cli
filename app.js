@@ -88,7 +88,7 @@ const parseArguments = () => {
     }
     
     // 解析 --add 参数（添加文件夹到配置）
-    if (arg === '--add') {
+    if (arg === '--add' || arg === '-a') {
       result.action = 'add';
       const nextArg = args[i + 1];
       if (nextArg && !nextArg.startsWith('-')) {
@@ -151,17 +151,17 @@ const parseArguments = () => {
     }
     
     // 解析 --list 参数（列出所有配置的文件夹）
-    if (arg === '--list') {
+    if (arg === '--list' || arg === '-l') {
       result.action = 'list';
     }
     
     // 解析 --clear 参数（执行文件清理）
-    if (arg === '--clear') {
+    if (arg === '--clear' || arg === '-c') {
       result.action = 'clear';
     }
     
     // 解析 --configclear 参数（清空所有配置）
-    if (arg === '--configclear') {
+    if (arg === '--configclear' || arg === '-cfc') {
       result.action = 'configclear';
     }
     
@@ -208,6 +208,10 @@ const showHelp = () => {
   console.log('  --clear               执行文件清理操作');
   console.log('  -d, --days <天数>     指定文件保留天数（默认: 0天），必须与--clear参数搭配使用才能生效');
   console.log('  -f, --force           跳过所有确认提示，直接执行相应操作');
+  console.log('                        与--clear参数搭配使用时，将直接删除符合条件的文件，而不执行移动操作');
+  console.log('                        注意: 直接删除的文件不可恢复，请谨慎使用');
+  console.log('                        示例: file-cleanup --clear -f （直接删除文件）');
+  console.log('                        示例: file-cleanup --clear --days 30 -f （直接删除超过30天的文件）');
   console.log('');
   console.log('配置管理选项:');
   console.log('  --add <路径>          添加文件夹到配置（支持绝对路径和相对路径）');
@@ -221,10 +225,10 @@ const showHelp = () => {
   console.log('  -v, --version         显示版本信息');
   console.log('');
   console.log('功能说明:');
-  console.log('  文件移动配置:');
-  console.log('    - 支持将文件移动到指定目录而非直接删除');
-  console.log('    - 可配置自动压缩功能，减少存储空间占用');
-  console.log('    - 配置文件中moveConfig部分可自定义移动行为');
+  console.log('  回收站功能:');
+  console.log('    - 支持将文件移动到指定的回收站目录而非直接删除');
+  console.log('    - 配置文件中moveConfig部分可自定义回收站行为');
+  console.log('    - 移动后的文件可以在回收站中查看和恢复');
   console.log('');
   console.log('  通配符使用:');
   console.log('    - 使用 "*" 表示所有文件类型，需在配置文件中用引号包裹');
@@ -255,8 +259,13 @@ const showHelp = () => {
   console.log('  file-cleanup --remove ./logs');
   console.log('  file-cleanup --update ./old-folder ./new-folder');
   console.log('');
-  console.log('  # 执行清理');
-  console.log('  file-cleanup --clear --days 30');
+  console.log('  # 执行清理（回收站模式）');
+  console.log('  file-cleanup --clear （使用默认保留天数，移动到回收站）');
+  console.log('  file-cleanup --clear --days 30 （使用指定保留天数，移动到回收站）');
+  console.log('');
+  console.log('  # 执行清理（直接删除模式，跳过回收站）');
+  console.log('  file-cleanup --clear --force （直接删除文件，不可恢复）');
+  console.log('  file-cleanup --clear --days 30 --force （直接删除超过指定天数的文件，不可恢复）');
   console.log('');
   console.log('注意事项:');
   console.log('  - 当未指定任何选项时，默认显示此帮助文档');
@@ -427,9 +436,13 @@ const main = async () => {
       logger.info(`清理参数: 文件夹=${configFolders.join(', ')}, 保留天数=${params.retentionDays}, 允许的扩展名=${config.allowedExtensions.join(', ')}`);
 
       // 当配置为处理所有文件（"*"）时，添加确认机制
-      if (config.allowedExtensions.includes('*') && !params.force) {
+      if (config.allowedExtensions.includes('*')) {
         console.log('\n⚠️  警告: 检测到通配符配置（"*"），将处理所有文件类型！');
-        console.log('   此操作可能会导致大量文件被移动，建议谨慎执行。');
+        if (params.force) {
+          console.log('   此操作将直接删除所有符合条件的文件，不可恢复！');
+        } else {
+          console.log('   此操作可能会导致大量文件被移动，建议谨慎执行。');
+        }
         console.log('   请确认是否继续执行？(y/n)');
         
         const rl = readline.createInterface({
@@ -442,24 +455,30 @@ const main = async () => {
           console.log('');
           
           if (answer.toLowerCase() === 'y') {
-            console.log('📦 正在执行清理任务...');
-            // 执行清理任务
-            const result = await executeCleanup(configFolders, params.retentionDays);
-            
-            console.log('\n✅ 文件清理任务完成!');
-            console.log(`   总计检查文件: ${result.totalFiles}个`);
-            console.log(`   成功移动文件: ${result.movedFiles}个`);
-            console.log(`   跳过文件: ${result.skippedFiles}个`);
-            
-            if (result.compression && result.compression.success) {
-              console.log(`   压缩包: ${result.compression.outputPath}`);
-              console.log(`   压缩文件数: ${result.compression.fileCount}个`);
-              console.log(`   压缩前大小: ${result.compression.totalSize}`);
-              console.log(`   压缩后大小: ${result.compression.compressedSize}`);
+            if (params.force) {
+              console.log('🗑️  正在执行强制删除任务...');
+              // 执行强制删除任务
+              const result = await executeCleanup(configFolders, params.retentionDays, true);
+              
+              console.log('\n✅ 文件删除任务完成!');
+              console.log(`   总计检查文件: ${result.totalFiles}个`);
+              console.log(`   成功删除文件: ${result.movedFiles}个`);
+              console.log(`   跳过文件: ${result.skippedFiles}个`);
+              console.log(`   结束时间: ${new Date().toLocaleString()}`);
+              console.log('=== 文件删除操作完成 ===');
+            } else {
+              console.log('� 正在执行清理任务...');
+              // 执行清理任务
+              const result = await executeCleanup(configFolders, params.retentionDays);
+              
+              console.log('\n✅ 文件清理任务完成!');
+              console.log(`   总计检查文件: ${result.totalFiles}个`);
+              console.log(`   成功移动文件: ${result.movedFiles}个`);
+              console.log(`   跳过文件: ${result.skippedFiles}个`);
+              
+              console.log(`   结束时间: ${new Date().toLocaleString()}`);
+              console.log('=== 文件清理操作完成 ===');
             }
-            
-            console.log(`   结束时间: ${new Date().toLocaleString()}`);
-            console.log('=== 文件清理操作完成 ===');
             
             logger.info('=== 文件清理脚本结束 ===');
             process.exit(0);
@@ -474,25 +493,31 @@ const main = async () => {
         return;
       }
 
-      console.log('\n📦 正在执行清理任务...');
+      if (params.force) {
+        console.log('\n🗑️  正在执行强制删除任务...');
+        // 执行强制删除任务
+        const result = await executeCleanup(configFolders, params.retentionDays, true);
 
-      // 执行清理任务
-      const result = await executeCleanup(configFolders, params.retentionDays);
+        console.log('\n✅ 文件删除任务完成!');
+        console.log(`   总计检查文件: ${result.totalFiles}个`);
+        console.log(`   成功删除文件: ${result.movedFiles}个`);
+        console.log(`   跳过文件: ${result.skippedFiles}个`);
+        console.log(`   结束时间: ${new Date().toLocaleString()}`);
+        console.log('=== 文件删除操作完成 ===');
+      } else {
+        console.log('\n📦 正在执行清理任务...');
 
-      console.log('\n✅ 文件清理任务完成!');
-      console.log(`   总计检查文件: ${result.totalFiles}个`);
-      console.log(`   成功移动文件: ${result.movedFiles}个`);
-      console.log(`   跳过文件: ${result.skippedFiles}个`);
-      
-      if (result.compression && result.compression.success) {
-        console.log(`   压缩包: ${result.compression.outputPath}`);
-        console.log(`   压缩文件数: ${result.compression.fileCount}个`);
-        console.log(`   压缩前大小: ${result.compression.totalSize}`);
-        console.log(`   压缩后大小: ${result.compression.compressedSize}`);
+        // 执行清理任务
+        const result = await executeCleanup(configFolders, params.retentionDays);
+
+        console.log('\n✅ 文件清理任务完成!');
+        console.log(`   总计检查文件: ${result.totalFiles}个`);
+        console.log(`   成功移动文件: ${result.movedFiles}个`);
+        console.log(`   跳过文件: ${result.skippedFiles}个`);
+        
+        console.log(`   结束时间: ${new Date().toLocaleString()}`);
+        console.log('=== 文件清理操作完成 ===');
       }
-      
-      console.log(`   结束时间: ${new Date().toLocaleString()}`);
-      console.log('=== 文件清理操作完成 ===');
 
       logger.info('=== 文件清理脚本结束 ===');
       break;

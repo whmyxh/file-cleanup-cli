@@ -43,7 +43,6 @@
     "url": "https://github.com/whmyxh/file-cleanup-cli/issues"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16",
     "fs-extra": "^11.3.3",
     "js-yaml": "^4.1.1",
     "winston": "^3.19.0"

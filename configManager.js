@@ -153,28 +153,41 @@ ${config.folders.map(folder => `  - "${folder.replace(/\\/g, '\\\\')}"`).join('\
     // 添加moveConfig配置（如果存在）
     if (config.moveConfig) {
       yamlContent += `
+
 # 文件移动配置
 moveConfig:
-  # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）
-  targetDirectory: ${config.moveConfig.targetDirectory}
 `;
       
-      // 添加其他moveConfig选项（如果存在）
-      if (config.moveConfig.enableCompression !== undefined) {
-        yamlContent += `  # 是否在移动完成后自动压缩
-  enableCompression: ${config.moveConfig.enableCompression}
+      // 遍历所有moveConfig字段，动态添加到YAML内容中
+      const entries = Object.entries(config.moveConfig);
+      if (entries.length > 0) {
+        entries.forEach(([key, value]) => {
+          // 为不同字段添加适当的注释
+          const comments = {
+            targetDirectory: '文件移动目标目录（支持绝对路径或相对于项目根目录的路径）',
+            enableCompression: '是否在移动完成后自动压缩',
+            compressionPrefix: '压缩包名称前缀',
+            deleteAfterCompression: '压缩完成后是否删除源文件（移动目录中的文件）'
+          };
+          
+          if (comments[key]) {
+            yamlContent += `  # ${comments[key]}
 `;
-      }
-      
-      if (config.moveConfig.compressionPrefix) {
-        yamlContent += `  # 压缩包名称前缀
-  compressionPrefix: ${config.moveConfig.compressionPrefix}
+          }
+          
+          // 根据值的类型格式化输出
+          if (typeof value === 'string') {
+            // 字符串值需要添加引号，特别是包含空格或特殊字符的情况
+            yamlContent += `  ${key}: "${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"
 `;
-      }
-      
-      if (config.moveConfig.deleteAfterCompression !== undefined) {
-        yamlContent += `  # 压缩完成后是否删除源文件（移动目录中的文件）
-  deleteAfterCompression: ${config.moveConfig.deleteAfterCompression}
+          } else {
+            yamlContent += `  ${key}: ${value}
+`;
+          }
+        });
+      } else {
+        // 如果moveConfig是空对象，添加一个明确的空对象结构
+        yamlContent += `  {}
 `;
       }
     }
