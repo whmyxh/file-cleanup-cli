@@ -30,8 +30,41 @@ const validateFolderPath = (folderPath) => {
       return { valid: false, error: '文件夹路径不能为空', absolutePath: null };
     }
 
-    // 将相对路径转换为绝对路径
-    const absolutePath = path.isAbsolute(folderPath) ? folderPath : path.join(process.cwd(), folderPath);
+    // 清理路径字符串，移除首尾空白字符
+    const trimmedPath = folderPath.trim();
+
+    // 检查路径中是否包含无效字符
+    // 对于 Windows 绝对路径（如 C:\folder），冒号是合法的
+    // 对于其他情况，冒号应该被视为无效字符
+    const invalidChars = /[<>:"|?*]/;
+    let hasInvalidChars = false;
+    
+    if (invalidChars.test(trimmedPath)) {
+      // 检查是否是 Windows 绝对路径格式（如 C:\folder 或 C:/folder）
+      const windowsAbsolutePathRegex = /^[a-zA-Z]:[\\/]/;
+      if (windowsAbsolutePathRegex.test(trimmedPath)) {
+        // 对于 Windows 绝对路径，只检查除了驱动器号后的冒号之外的其他无效字符
+        const pathWithoutDrive = trimmedPath.substring(2);
+        hasInvalidChars = /[<>:"|?*]/ .test(pathWithoutDrive);
+      } else {
+        hasInvalidChars = true;
+      }
+    }
+    
+    if (hasInvalidChars) {
+      return { valid: false, error: '路径包含无效字符（<>:"|?*）', absolutePath: null };
+    }
+
+    // 检查路径是否为绝对路径
+    let absolutePath;
+    try {
+      // 尝试解析为绝对路径
+      absolutePath = path.isAbsolute(trimmedPath) 
+        ? path.resolve(trimmedPath) 
+        : path.resolve(process.cwd(), trimmedPath);
+    } catch (error) {
+      return { valid: false, error: '路径格式无效', absolutePath: null };
+    }
 
     // 检查文件夹是否存在
     if (!fs.existsSync(absolutePath)) {
@@ -39,9 +72,13 @@ const validateFolderPath = (folderPath) => {
     }
 
     // 检查路径是否为文件夹
-    const stats = fs.statSync(absolutePath);
-    if (!stats.isDirectory()) {
-      return { valid: false, error: '路径不是一个文件夹', absolutePath };
+    try {
+      const stats = fs.statSync(absolutePath);
+      if (!stats.isDirectory()) {
+        return { valid: false, error: '路径不是一个文件夹', absolutePath };
+      }
+    } catch (error) {
+      return { valid: false, error: '无法获取路径信息', absolutePath };
     }
 
     // 检查是否有读取权限
@@ -92,104 +129,102 @@ const loadConfig = () => {
  */
 const saveConfig = (folders) => {
   try {
-    // 读取现有配置（如果存在）
-    let config = {
-      retentionDays: 7,
-      allowedExtensions: ['docx', 'xlsx', 'csv', 'pptx', 'txt'],
-      protectedFiles: ['desktop.ini', 'thumbs.db', '$recycle.bin', 'system volume information'],
-      logConfig: {
-        level: 'info',
-        filePath: 'logs/cleanup.log',
-        maxSize: 10,
-        maxFiles: 5
-      },
-      folders: []
-    };
+    let yamlContent;
     
     if (fs.existsSync(CONFIG_FILE)) {
-      const data = fs.readFileSync(CONFIG_FILE, 'utf8');
-      const loadedConfig = yaml.load(data) || {};
-      // 保留所有现有配置值，只覆盖默认配置中有的字段
-      config = {
-        ...config,
-        ...loadedConfig
-      };
-    }
-    
-    // 更新folders字段
-    config.folders = folders;
-    
-    // 创建带注释的YAML内容
-    let yamlContent = `# 清理脚本配置文件
+      // 读取现有配置文件的原始内容
+      const existingContent = fs.readFileSync(CONFIG_FILE, 'utf8');
+      
+      // 生成新的folders部分内容
+      const newFoldersSection = `folders:
+${folders.map(folder => {
+  // 直接使用路径字符串，确保反斜杠正确处理
+  return `  - "${folder.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}).join('\n')}`;
+      
+      // 查找folders部分的开始和结束位置
+      // 匹配包含folders:的行，忽略前面的内容
+      const foldersLineMatch = existingContent.match(/.*folders:\s*$/m);
+      const foldersStartMatch = foldersLineMatch ? {
+        index: foldersLineMatch.index + foldersLineMatch[0].indexOf('folders:'),
+        0: 'folders:'
+      } : null;
+      
+      if (foldersStartMatch) {
+        // 找到folders部分，确定其范围
+        const foldersStartIndex = foldersStartMatch.index;
+        
+        // 找到下一个顶级键的开始位置，作为folders部分的结束位置
+        // 顶级键的模式：行首（可能有空格）后跟非空格字符，然后是冒号
+        // 从folders行之后开始查找，跳过当前的folders行
+        const foldersLineEnd = existingContent.indexOf('\n', foldersStartIndex);
+        const contentAfterFoldersLine = foldersLineEnd !== -1 
+          ? existingContent.slice(foldersLineEnd) 
+          : '';
+        
+        const nextTopLevelKeyMatch = contentAfterFoldersLine.match(/^\s*[^\s:]+:\s*$/m);
+        let foldersEndIndex;
+        
+        if (nextTopLevelKeyMatch) {
+          // 找到了下一个顶级键，使用其开始位置作为结束位置
+          foldersEndIndex = foldersLineEnd + nextTopLevelKeyMatch.index;
+        } else {
+          // 没有找到下一个顶级键，使用文件末尾作为结束位置
+          foldersEndIndex = existingContent.length;
+        }
+        
+        // 提取folders部分之前和之后的内容
+        const beforeFolders = existingContent.slice(0, foldersStartIndex);
+        const afterFolders = existingContent.slice(foldersEndIndex);
+        
+        // 重新组合内容，只替换folders部分
+        yamlContent = beforeFolders + newFoldersSection + '\n' + afterFolders;
+      } else {
+        // 没有找到folders部分，在文件末尾添加
+        yamlContent = existingContent + '\n\n# 要清理的文件夹列表（绝对路径）\n' + newFoldersSection;
+      }
+    } else {
+      // 配置文件不存在，创建默认配置
+      yamlContent = `# 清理脚本配置文件
 # 定义清理规则和保留策略
 
 # 默认文件保留天数（单位：天）
-retentionDays: ${config.retentionDays}
+retentionDays: 7
 
 # 允许删除的文件扩展名列表（区分大小写）
 allowedExtensions:
-${config.allowedExtensions.map(ext => `  - ${ext === '*' ? '"*"' : ext}`).join('\n')}
+  - docx
+  - xlsx
+  - csv
+  - pptx
+  - txt
 
 # 系统保护文件列表（文件名，不区分大小写）
 protectedFiles:
-${config.protectedFiles.map(file => `  - ${file}`).join('\n')}
+  - desktop.ini
+  - thumbs.db
+  - $recycle.bin
+  - system volume information
 
 # 日志配置
 logConfig:
   # 日志级别：error, warn, info, verbose, debug, silly
-  level: ${config.logConfig.level}
+  level: info
   # 日志文件路径
-  filePath: ${config.logConfig.filePath}
+  filePath: logs/cleanup.log
   # 日志文件最大大小（单位：MB）
-  maxSize: ${config.logConfig.maxSize}
+  maxSize: 10
   # 日志文件最大数量
-  maxFiles: ${config.logConfig.maxFiles}
+  maxFiles: 5
 
 # 要清理的文件夹列表（绝对路径）
 folders:
-${config.folders.map(folder => `  - "${folder.replace(/\\/g, '\\\\')}"`).join('\n')}
-`;
-
-    // 添加moveConfig配置（如果存在）
-    if (config.moveConfig) {
-      yamlContent += `
 
 # 文件移动配置
 moveConfig:
+  # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）
+  targetDirectory: "trash"
 `;
-      
-      // 遍历所有moveConfig字段，动态添加到YAML内容中
-      const entries = Object.entries(config.moveConfig);
-      if (entries.length > 0) {
-        entries.forEach(([key, value]) => {
-          // 为不同字段添加适当的注释
-          const comments = {
-            targetDirectory: '文件移动目标目录（支持绝对路径或相对于项目根目录的路径）',
-            enableCompression: '是否在移动完成后自动压缩',
-            compressionPrefix: '压缩包名称前缀',
-            deleteAfterCompression: '压缩完成后是否删除源文件（移动目录中的文件）'
-          };
-          
-          if (comments[key]) {
-            yamlContent += `  # ${comments[key]}
-`;
-          }
-          
-          // 根据值的类型格式化输出
-          if (typeof value === 'string') {
-            // 字符串值需要添加引号，特别是包含空格或特殊字符的情况
-            yamlContent += `  ${key}: "${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"
-`;
-          } else {
-            yamlContent += `  ${key}: ${value}
-`;
-          }
-        });
-      } else {
-        // 如果moveConfig是空对象，添加一个明确的空对象结构
-        yamlContent += `  {}
-`;
-      }
     }
     
     // 保存配置到YAML文件
@@ -215,7 +250,7 @@ const addFolder = (folderPath) => {
   const validation = validateFolderPath(folderPath);
   if (!validation.valid) {
     logger.warn(`添加文件夹失败: ${folderPath}`, { error: validation.error });
-    return { success: false, message: validation.error };
+    return { success: false, message: `❌ 添加文件夹失败: ${validation.error}` };
   }
   
   // 使用绝对路径
@@ -224,7 +259,7 @@ const addFolder = (folderPath) => {
   // 检查是否已存在
   if (folders.includes(absolutePath)) {
     logger.warn(`文件夹已存在: ${absolutePath}`);
-    return { success: false, message: '文件夹已存在于配置中' };
+    return { success: false, message: '❌ 文件夹已存在于配置中' };
   }
   
   // 添加文件夹
@@ -233,9 +268,9 @@ const addFolder = (folderPath) => {
   // 保存配置
   if (saveConfig(folders)) {
     logger.info(`成功添加文件夹: ${absolutePath}`);
-    return { success: true, message: '文件夹添加成功' };
+    return { success: true, message: `✅ 文件夹添加成功: ${absolutePath}` };
   } else {
-    return { success: false, message: '保存配置失败' };
+    return { success: false, message: '❌ 保存配置失败' };
   }
 };
 
@@ -278,30 +313,37 @@ const removeFolder = (folderPath) => {
 const updateFolder = (oldPath, newPath) => {
   const folders = loadConfig();
   
-  // 将旧路径转换为绝对路径
-  const oldAbsolutePath = path.isAbsolute(oldPath) ? oldPath : path.join(process.cwd(), oldPath);
+  // 验证旧路径
+  const oldValidation = validateFolderPath(oldPath);
+  if (!oldValidation.valid) {
+    logger.warn(`修改文件夹失败: ${oldPath}`, { error: oldValidation.error });
+    return { success: false, message: `❌ 修改文件夹失败: ${oldValidation.error}` };
+  }
+  
+  // 使用旧路径的绝对路径
+  const oldAbsolutePath = oldValidation.absolutePath;
   
   // 检查旧路径是否存在
   const index = folders.indexOf(oldAbsolutePath);
   if (index === -1) {
     logger.warn(`要修改的文件夹不存在: ${oldAbsolutePath}`);
-    return { success: false, message: '要修改的文件夹不存在于配置中' };
+    return { success: false, message: '❌ 要修改的文件夹不存在于配置中' };
   }
   
   // 验证新路径
-  const validation = validateFolderPath(newPath);
-  if (!validation.valid) {
-    logger.warn(`修改文件夹失败: ${newPath}`, { error: validation.error });
-    return { success: false, message: validation.error };
+  const newValidation = validateFolderPath(newPath);
+  if (!newValidation.valid) {
+    logger.warn(`修改文件夹失败: ${newPath}`, { error: newValidation.error });
+    return { success: false, message: `❌ 修改文件夹失败: ${newValidation.error}` };
   }
   
   // 使用新路径的绝对路径
-  const newAbsolutePath = validation.absolutePath;
+  const newAbsolutePath = newValidation.absolutePath;
   
   // 检查新路径是否已存在（排除自身）
   if (folders.includes(newAbsolutePath) && newAbsolutePath !== oldAbsolutePath) {
     logger.warn(`新文件夹路径已存在: ${newAbsolutePath}`);
-    return { success: false, message: '新文件夹路径已存在于配置中' };
+    return { success: false, message: '❌ 新文件夹路径已存在于配置中' };
   }
   
   // 修改文件夹
@@ -346,5 +388,6 @@ export {
   getAllFolders,
   clearAllFolders,
   validateFolderPath,
-  loadConfig
+  loadConfig,
+  saveConfig
 };

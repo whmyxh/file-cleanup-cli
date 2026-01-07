@@ -8,6 +8,7 @@ import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
+import crypto from 'crypto';
 import logger from './logger.js';
 
 /**
@@ -69,6 +70,38 @@ const formatFileSize = (bytes) => {
   }
   
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+/**
+ * 计算文件的MD5校验和
+ * @param {string} filePath - 文件路径
+ * @returns {string} - 文件的MD5校验和
+ */
+const calculateFileHash = (filePath) => {
+  try {
+    // 使用fs.createReadStream创建可读流，避免一次性读取大文件
+    const fileStream = fs.createReadStream(filePath);
+    const hash = crypto.createHash('md5');
+    
+    return new Promise((resolve, reject) => {
+      fileStream.on('data', (data) => {
+        hash.update(data);
+      });
+      
+      fileStream.on('end', () => {
+        const digest = hash.digest('hex');
+        resolve(digest);
+      });
+      
+      fileStream.on('error', (error) => {
+        logger.error(`计算文件校验和失败: ${filePath}`, { error: error.message });
+        reject(error);
+      });
+    });
+  } catch (error) {
+    logger.error(`计算文件校验和失败: ${filePath}`, { error: error.message });
+    throw error;
+  }
 };
 
 /**
@@ -138,9 +171,8 @@ const isFileInUse = (filePath) => {
     fs.closeSync(fd);
     fd = null;
     
-    fd = fs.openSync(filePath, 'w', 0o666);
-    fs.closeSync(fd);
-    fd = null;
+    // 移除 'w' 模式打开，因为这会清空文件内容
+    // 只需要验证文件是否可读写即可，不需要写入模式
     
     logger.debug(`文件未被使用: ${filePath}`);
     return false;
@@ -226,39 +258,159 @@ const getUniqueFileName = (targetDir, fileName) => {
  * @param {string} filePath - 源文件路径
  * @param {string} targetDir - 目标目录
  * @param {string} baseDir - 基础目录路径（用于确定相对路径）
- * @returns {Object} - 移动结果 { success: boolean, targetPath: string, error?: string }
+ * @returns {Promise<Object>} - 移动结果 { success: boolean, targetPath: string, error?: string }
  */
-const moveFile = (filePath, targetDir, baseDir) => {
+const moveFile = async (filePath, targetDir, baseDir) => {
+  let targetPath = null;
+  let uniqueTargetPath = null;
+  
   try {
-    // 获取文件相对于基础目录的路径
-    const relativePath = baseDir ? path.relative(baseDir, filePath) : path.basename(filePath);
-    // 构建目标路径，保留完整的目录结构
-    const targetPath = path.join(targetDir, relativePath);
+    logger.info(`开始移动文件: ${filePath}`, { targetDir, baseDir });
+    
+    // 读取源文件内容，确保能正确读取
+    let sourceContent;
+    let stats;
+    try {
+        // 验证文件是否存在且可访问
+        if (!fs.existsSync(filePath)) {
+            throw new Error(`文件不存在: ${filePath}`);
+        }
+        logger.debug(`文件存在: ${filePath}`);
+        
+        // 检查文件权限
+        stats = fs.statSync(filePath);
+        logger.info(`文件权限: ${stats.mode.toString(8)}`, { filePath });
+        logger.info(`文件大小 (stat): ${stats.size}字节`, { filePath });
+        
+        // 尝试使用原始Buffer读取
+        sourceContent = fs.readFileSync(filePath);
+        logger.info(`源文件内容长度 (Buffer): ${sourceContent.length}字节`, { filePath });
+        
+        // 尝试将Buffer转换为字符串查看内容
+        const contentStr = sourceContent.toString('utf8');
+        logger.info(`源文件内容 (字符串): "${contentStr}"`, { filePath });
+        
+    } catch (readError) {
+        logger.error(`读取源文件失败: ${filePath}`, { error: readError.message });
+        throw readError;
+    }
+    
+    // 确保源文件内容不为空
+    if (sourceContent.length === 0) {
+        logger.warn(`源文件内容为空: ${filePath}`);
+    }
+    
+    // 构建目标路径
+    const fileName = path.basename(filePath);
+    // 简化路径处理，直接使用文件名作为目标文件名
+    const simpleTargetPath = path.join(targetDir, fileName);
+    logger.debug(`简化目标路径: ${simpleTargetPath}`);
+    
+    // 获取唯一的目标路径
+    uniqueTargetPath = getUniqueFileName(targetDir, fileName);
+    logger.debug(`生成唯一目标路径: ${uniqueTargetPath}`);
     
     // 创建必要的子目录
-    const targetFileDir = path.dirname(targetPath);
+    const targetFileDir = path.dirname(uniqueTargetPath);
     if (!fs.existsSync(targetFileDir)) {
+      logger.debug(`创建目标文件目录: ${targetFileDir}`);
       fs.ensureDirSync(targetFileDir);
     }
     
-    // 获取唯一的目标路径
-    const uniqueTargetPath = getUniqueFileName(targetFileDir, path.basename(filePath));
-    
-    const stats = fs.statSync(filePath);
+    // 获取源文件信息
     const fileSize = formatFileSize(stats.size);
+    logger.info(`文件信息: 大小=${fileSize} (${stats.size}字节)`, { filePath });
     
-    fs.moveSync(filePath, uniqueTargetPath);
+    // 第一步：计算源文件的校验和
+    const sourceHash = await calculateFileHash(filePath);
+    logger.debug(`源文件校验和: ${sourceHash}`, { filePath });
+    
+    // 第二步：复制文件（使用直接的文件读写方法，确保内容被正确复制）
+    logger.info(`开始复制文件: ${filePath} -> ${uniqueTargetPath}`);
+    // 写入目标文件
+    fs.writeFileSync(uniqueTargetPath, sourceContent);
+    logger.debug(`文件复制完成，复制了 ${sourceContent.length} 字节`, { sourcePath: filePath, targetPath: uniqueTargetPath });
+    
+    // 验证目标文件是否存在
+    if (!fs.existsSync(uniqueTargetPath)) {
+      const errorMsg = `目标文件创建失败: ${uniqueTargetPath}`;
+      logger.error(errorMsg);
+      return { success: false, targetPath: null, fileName: path.basename(filePath), error: errorMsg };
+    }
+    
+    // 读取目标文件内容，确保能正确读取
+    const targetContent = fs.readFileSync(uniqueTargetPath);
+    logger.debug(`目标文件内容长度: ${targetContent.length}字节`, { uniqueTargetPath });
+    
+    // 第三步：验证文件大小，确保复制完整
+    const targetStats = fs.statSync(uniqueTargetPath);
+    if (stats.size !== targetStats.size) {
+      // 复制不完整，删除目标文件并返回错误
+      const errorMsg = `文件复制不完整: 源大小 ${stats.size}，目标大小 ${targetStats.size}`;
+      logger.error(errorMsg, { sourcePath: filePath, targetPath: uniqueTargetPath });
+      
+      try {
+        if (fs.existsSync(uniqueTargetPath)) {
+          fs.removeSync(uniqueTargetPath);
+          logger.debug(`删除不完整的目标文件: ${uniqueTargetPath}`);
+        }
+      } catch (removeError) {
+        logger.warn(`删除不完整的目标文件失败: ${uniqueTargetPath}`, { error: removeError.message });
+      }
+      
+      return { success: false, targetPath: null, fileName: path.basename(filePath), error: errorMsg };
+    }
+    
+    // 第四步：计算目标文件的校验和，确保内容一致
+    const targetHash = await calculateFileHash(uniqueTargetPath);
+    logger.debug(`目标文件校验和: ${targetHash}`, { uniqueTargetPath });
+    
+    if (sourceHash !== targetHash) {
+      // 校验和不匹配，删除目标文件并返回错误
+      const errorMsg = `文件内容不匹配: 源文件校验和 ${sourceHash}，目标文件校验和 ${targetHash}`;
+      logger.error(errorMsg, { sourcePath: filePath, targetPath: uniqueTargetPath });
+      
+      try {
+        if (fs.existsSync(uniqueTargetPath)) {
+          fs.removeSync(uniqueTargetPath);
+          logger.debug(`删除内容不匹配的目标文件: ${uniqueTargetPath}`);
+        }
+      } catch (removeError) {
+        logger.warn(`删除内容不匹配的目标文件失败: ${uniqueTargetPath}`, { error: removeError.message });
+      }
+      
+      return { success: false, targetPath: null, fileName: path.basename(filePath), error: errorMsg };
+    }
+    
+    // 第五步：验证通过后，删除源文件
+    logger.info(`验证通过，开始删除源文件: ${filePath}`);
+    fs.removeSync(filePath);
+    logger.debug(`源文件删除完成: ${filePath}`);
     
     logger.info(`成功移动文件: ${filePath} -> ${uniqueTargetPath}`, {
       fileName: path.basename(filePath),
       sourcePath: filePath,
       targetPath: uniqueTargetPath,
-      fileSize
+      fileSize,
+      sourceSize: stats.size,
+      targetSize: targetStats.size,
+      hash: sourceHash
     });
     
     return { success: true, targetPath: uniqueTargetPath, fileName: path.basename(filePath), fileSize };
   } catch (error) {
-    logger.warn(`移动文件失败: ${filePath}`, { error: error.message });
+    logger.error(`移动文件失败: ${filePath}`, { error: error.message, targetPath });
+    
+    // 清理：如果目标文件已创建，删除它
+    if (uniqueTargetPath && fs.existsSync(uniqueTargetPath)) {
+      try {
+        fs.removeSync(uniqueTargetPath);
+        logger.debug(`清理失败移动的目标文件: ${uniqueTargetPath}`);
+      } catch (cleanupError) {
+        logger.warn(`清理目标文件失败: ${uniqueTargetPath}`, { error: cleanupError.message });
+      }
+    }
+    
     return { success: false, targetPath: null, fileName: path.basename(filePath), error: error.message };
   }
 };
@@ -299,7 +451,7 @@ const deleteFile = (filePath) => {
  * @param {boolean} forceDelete - 是否直接删除文件（默认false，即移动到垃圾目录）
  * @returns {Object} - 清理结果统计
  */
-const cleanFolder = (folderPath, retentionDays, baseDir = null, forceDelete = false) => {
+const cleanFolder = async (folderPath, retentionDays, baseDir = null, forceDelete = false) => {
   let totalFiles = 0;
   let movedFiles = 0;
   let skippedFiles = 0;
@@ -319,7 +471,9 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null, forceDelete = fa
     const files = fs.readdirSync(folderPath);
     
     for (const file of files) {
-      const filePath = path.join(folderPath, file);
+      // 构建绝对文件路径，确保路径处理正确
+      const filePath = path.resolve(path.join(folderPath, file));
+      logger.debug(`处理文件: ${filePath}`, { folderPath, file });
       totalFiles++;
       
       if (isProtectedFile(file)) {
@@ -331,7 +485,7 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null, forceDelete = fa
       try {
         const stats = fs.statSync(filePath);
         if (stats.isDirectory()) {
-          const subFolderResult = cleanFolder(filePath, retentionDays, currentBaseDir, forceDelete);
+          const subFolderResult = await cleanFolder(filePath, retentionDays, currentBaseDir, forceDelete);
           totalFiles += subFolderResult.totalFiles;
           movedFiles += subFolderResult.movedFiles;
           skippedFiles += subFolderResult.skippedFiles;
@@ -383,7 +537,7 @@ const cleanFolder = (folderPath, retentionDays, baseDir = null, forceDelete = fa
           }
           
           // 传递baseDir以保留完整的目录结构
-          const moveResult = moveFile(filePath, targetDir, currentBaseDir);
+          const moveResult = await moveFile(filePath, targetDir, currentBaseDir);
           if (moveResult.success) {
             movedFiles++;
             movedFileList.push({
@@ -465,7 +619,7 @@ const executeCleanup = async (folders, retentionDays, forceDelete = false) => {
   const allMovedFiles = [];
   
   for (const folder of folders) {
-    const result = cleanFolder(folder, retentionDays, null, forceDelete);
+    const result = await cleanFolder(folder, retentionDays, null, forceDelete);
     totalTotalFiles += result.totalFiles;
     totalMovedFiles += result.movedFiles;
     totalSkippedFiles += result.skippedFiles;
@@ -488,4 +642,6 @@ const executeCleanup = async (folders, retentionDays, forceDelete = false) => {
   };
 }
 
-export { executeCleanup, isExpired };
+
+export { executeCleanup, isExpired, moveFile, cleanFolder };
+

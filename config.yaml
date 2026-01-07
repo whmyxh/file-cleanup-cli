@@ -4,7 +4,7 @@
 # 默认文件保留天数（单位：天）
 retentionDays: 0
 
-# 允许删除的文件扩展名列表（区分大小写）
+# 允许删除的文件扩展名列表（区分大小写）,使用"*"代表清理所有文件
 allowedExtensions:
   - "*"
 
@@ -28,10 +28,16 @@ logConfig:
 
 # 要清理的文件夹列表（绝对路径）
 folders:
-  - "E:\\js_project\\File_Deletion\\trash\\"
+  - "E:\\js_project\\File_Deletion\\test"
 
 
-# 文件移动配置
+
+
+
+
+
+
+
 moveConfig:
   # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）
   targetDirectory: "trash"

@@ -1,7 +1,7 @@
 {
   "name": "file-cleanup-cli",
   "version": "0.4.0",
-  "description": "一个功能强大的文件清理命令行工具，支持基于配置的自动清理、文件格式限制和灵活的文件夹管理",
+  "description": "一个基于 Node.js 的命令行文件清理工具，具有回收站功能，可按扩展名、保留天数批量移动指定文件夹及其子目录中的旧文件到自定义回收站目录，或根据需要直接删除符合条件的文件，提供配置管理、系统保护与详细日志记录。",
   "main": "app.js",
   "bin": {
     "file-cleanup": "./bin/cli.js"
@@ -23,7 +23,7 @@
   "license": "Apache 2.0",
   "type": "module",
   "engines": {
-    "node": ">=22.0.0"
+    "node": ">=22.19.0"
   },
   "files": [
     "bin/",
