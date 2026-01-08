@@ -15,7 +15,9 @@ import {
   updateFolder,
   getAllFolders,
   clearAllFolders,
-  validateFolderPath
+  validateFolderPath,
+  getRecycleBinDir,
+  updateRecycleBinDir
 } from './configManager.js';
 import readline from 'readline';
 
@@ -54,6 +56,7 @@ const parseArguments = () => {
     action: 'help',
     configPath: null,
     configNewPath: null,
+    recycleBinPath: null,
     error: null,
     force: false,
     yes: false
@@ -187,6 +190,28 @@ const parseArguments = () => {
     if (arg === '-y') {
       result.yes = true;
     }
+    
+    // 解析 --recycle-bin 参数（设置回收站目录）
+    if (arg === '--recycle-bin' || arg === '-rb') {
+      result.action = 'recycle-bin';
+      const nextArg = args[i + 1];
+      if (nextArg && !nextArg.startsWith('-')) {
+        result.recycleBinPath = nextArg;
+        i++;
+      } else {
+        result.error = {
+          type: 'missing',
+          option: '--recycle-bin',
+          message: '--recycle-bin 选项需要提供一个目录路径参数'
+        };
+        return result;
+      }
+    }
+    
+    // 解析 --list-recycle-bin 参数（列出当前回收站目录设置）
+    if (arg === '--list-recycle-bin' || arg === '-lrb') {
+      result.action = 'list-recycle-bin';
+    }
   }
   
   return result;
@@ -231,6 +256,10 @@ const showHelp = () => {
   console.log('  --update <旧路径> <新路径>  修改配置中的文件夹路径（支持绝对路径和相对路径）');
   console.log('  --list                列出所有配置的文件夹');
   console.log('  --configclear         清空所有文件夹配置（保留其他配置项）');
+  console.log('  --recycle-bin <路径>  设置回收站目录（支持绝对路径和相对路径）');
+  console.log('  --list-recycle-bin    列出当前回收站目录设置');
+  console.log('  -rb <路径>            设置回收站目录（简写）');
+  console.log('  -lrb                  列出当前回收站目录设置（简写）');
   console.log('');
   console.log('其他选项:');
   console.log('  -h, --help            显示帮助信息');
@@ -293,7 +322,7 @@ const main = async () => {
   
   // 检查参数解析错误
   if (params.error) {
-    console.error('❌ ' + params.error.message);
+    console.error('[ERROR] ' + params.error.message);
     console.log('');
     console.log('使用 --help 查看详细用法');
     logger.error(params.error.message);
@@ -310,7 +339,7 @@ const main = async () => {
       // 添加文件夹到配置
       // 注意：由于在parseArguments中已经验证了--add参数需要路径，这里的检查作为双重保障
       if (!params.configPath) {
-        console.error('❌ 错误: --add 选项需要提供一个文件夹路径参数');
+        console.error('[ERROR] 错误: --add 选项需要提供一个文件夹路径参数');
         console.log('用法: file-cleanup --add <路径>');
         logger.error('--add 选项缺少文件夹路径参数');
         process.exit(1);
@@ -323,7 +352,7 @@ const main = async () => {
       // 从配置中删除文件夹
       // 注意：由于在parseArguments中已经验证了--remove参数需要路径，这里的检查作为双重保障
       if (!params.configPath) {
-        console.error('❌ 错误: --remove 选项需要提供一个文件夹路径参数');
+        console.error('[ERROR] 错误: --remove 选项需要提供一个文件夹路径参数');
         console.log('用法: file-cleanup --remove <路径>');
         logger.error('--remove 选项缺少文件夹路径参数');
         process.exit(1);
@@ -336,7 +365,7 @@ const main = async () => {
       // 修改配置中的文件夹路径
       // 注意：由于在parseArguments中已经验证了--update参数需要两个路径，这里的检查作为双重保障
       if (!params.configPath || !params.configNewPath) {
-        console.error('❌ 错误: --update 选项需要提供两个文件夹路径参数：旧路径和新路径');
+        console.error('[ERROR] 错误: --update 选项需要提供两个文件夹路径参数：旧路径和新路径');
         console.log('用法: file-cleanup --update <旧路径> <新路径>');
         logger.error('--update 选项缺少必要的路径参数');
         process.exit(1);
@@ -358,6 +387,26 @@ const main = async () => {
       }
       process.exit(0);
       
+    case 'list-recycle-bin':
+      // 列出当前回收站目录设置
+      const currentRecycleBinDir = getRecycleBinDir();
+      console.log('当前回收站目录设置:');
+      console.log(`  ${currentRecycleBinDir}`);
+      process.exit(0);
+      
+    case 'recycle-bin':
+      // 设置回收站目录
+      // 注意：由于在parseArguments中已经验证了--recycle-bin参数需要路径，这里的检查作为双重保障
+      if (!params.recycleBinPath) {
+        console.error('[ERROR] 错误: --recycle-bin 选项需要提供一个目录路径参数');
+        console.log('用法: file-cleanup --recycle-bin <路径>');
+        logger.error('--recycle-bin 选项缺少目录路径参数');
+        process.exit(1);
+      }
+      const recycleBinResult = updateRecycleBinDir(params.recycleBinPath);
+      console.log(recycleBinResult.message);
+      process.exit(recycleBinResult.success ? 0 : 1);
+      
     case 'configclear':
       // 清空所有配置
       console.log('=== 清空配置操作 ===');
@@ -369,11 +418,11 @@ const main = async () => {
         const clearResult = clearAllFolders();
         console.log('');
         if (clearResult.success) {
-          console.log('✅ ' + clearResult.message);
+          console.log('[SUCCESS] ' + clearResult.message);
           console.log('=== 清空配置操作完成 ===');
           process.exit(0);
         } else {
-          console.log('❌ ' + clearResult.message);
+          console.log('[ERROR] ' + clearResult.message);
           console.log('=== 清空配置操作失败 ===');
           process.exit(1);
         }
@@ -392,16 +441,16 @@ const main = async () => {
             const clearResult = clearAllFolders();
             console.log('');
             if (clearResult.success) {
-              console.log('✅ ' + clearResult.message);
+              console.log('[SUCCESS] ' + clearResult.message);
               console.log('=== 清空配置操作完成 ===');
               process.exit(0);
             } else {
-              console.log('❌ ' + clearResult.message);
+              console.log('[ERROR] ' + clearResult.message);
               console.log('=== 清空配置操作失败 ===');
               process.exit(1);
             }
           } else {
-            console.log('❌ 操作已取消');
+            console.log('[ERROR] 操作已取消');
             console.log('=== 清空配置操作终止 ===');
             process.exit(0);
           }
@@ -419,7 +468,7 @@ const main = async () => {
       if (configFolders.length === 0) {
         logger.error('配置文件中没有配置任何文件夹');
         console.log('');
-        console.log('❌ 错误: 配置文件中没有配置任何文件夹');
+        console.log('[ERROR] 错误: 配置文件中没有配置任何文件夹');
         console.log('');
         console.log('请使用以下方式之一:');
         console.log('  1. 使用 --add 参数添加文件夹到配置');
@@ -432,7 +481,7 @@ const main = async () => {
       // 更新配置中的保留天数
       config.retentionDays = params.retentionDays;
 
-      console.log(`\n🔍 清理参数:`);
+      console.log(`\n[SEARCH] 清理参数:`);
       console.log(`   目标文件夹: ${configFolders.join(', ')}`);
       console.log(`   保留天数: ${params.retentionDays}天`);
       console.log(`   开始时间: ${new Date().toLocaleString()}`);
@@ -441,7 +490,7 @@ const main = async () => {
 
       // 强制删除操作的确认机制
       if (params.force && !params.yes) {
-        console.log('\n⚠️  警告: 检测到 --force 参数，将直接删除符合条件的文件，不可恢复！');
+        console.log('\n[WARNING]  警告: 检测到 --force 参数，将直接删除符合条件的文件，不可恢复！');
         console.log('   请确认是否继续执行？(y/n)');
         
         const rl = readline.createInterface({
@@ -454,11 +503,11 @@ const main = async () => {
           console.log('');
           
           if (answer.toLowerCase() === 'y') {
-            console.log('🗑️  正在执行强制删除任务...');
+            console.log('[TRASH]  正在执行强制删除任务...');
             // 执行强制删除任务
             const result = await executeCleanup(configFolders, params.retentionDays, true);
 
-            console.log('\n✅ 文件删除任务完成!');
+            console.log('\n[SUCCESS] 文件删除任务完成!');
             console.log(`   总计检查文件: ${result.totalFiles}个`);
             console.log(`   成功删除文件: ${result.movedFiles}个`);
             console.log(`   跳过文件: ${result.skippedFiles}个`);
@@ -468,7 +517,7 @@ const main = async () => {
             logger.info('=== 文件清理脚本结束 ===');
             process.exit(0);
           } else {
-            console.log('❌ 操作已取消');
+            console.log('[ERROR] 操作已取消');
             console.log('=== 文件清理操作终止 ===');
             logger.info('清理操作已被用户取消');
             process.exit(0);
@@ -479,23 +528,23 @@ const main = async () => {
       }
 
       if (params.force) {
-        console.log('\n🗑️  正在执行强制删除任务...');
+        console.log('\n[TRASH]  正在执行强制删除任务...');
         // 执行强制删除任务
         const result = await executeCleanup(configFolders, params.retentionDays, true);
 
-        console.log('\n✅ 文件删除任务完成!');
+        console.log('\n[SUCCESS] 文件删除任务完成!');
         console.log(`   总计检查文件: ${result.totalFiles}个`);
         console.log(`   成功删除文件: ${result.movedFiles}个`);
         console.log(`   跳过文件: ${result.skippedFiles}个`);
         console.log(`   结束时间: ${new Date().toLocaleString()}`);
         console.log('=== 文件删除操作完成 ===');
       } else {
-        console.log('\n📦 正在执行清理任务...');
+        console.log('\n[BOX]  正在执行清理任务...');
 
         // 执行清理任务
         const result = await executeCleanup(configFolders, params.retentionDays);
 
-        console.log('\n✅ 文件清理任务完成!');
+        console.log('\n[SUCCESS] 文件清理任务完成!');
         console.log(`   总计检查文件: ${result.totalFiles}个`);
         console.log(`   成功移动文件: ${result.movedFiles}个`);
         console.log(`   跳过文件: ${result.skippedFiles}个`);
