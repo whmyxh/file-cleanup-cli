@@ -224,6 +224,7 @@ logConfig:
   maxSize: 10
   # 日志文件最大数量
   maxFiles: 5
+  
 # 回收站目录设置
 moveConfig:
   # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）

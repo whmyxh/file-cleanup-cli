@@ -85,7 +85,6 @@ npm -v
 ```bash
 # 克隆仓库
 git clone https://github.com/whmyxh/file-cleanup-cli.git
-cd file-cleanup-cli
 
 # 进入您的项目目录
 cd /path/to/your/project
@@ -466,10 +465,6 @@ folders:
 - Windows 10 或以上版本
 
 
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
 
 ## 许可证
 
