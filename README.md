@@ -150,6 +150,8 @@ file-cleanup [选项]
 - `--update, -u <旧路径> <新路径>` - 修改配置中的文件夹路径（支持绝对路径和相对路径）
 - `--list, -l` - 列出所有配置的文件夹
 - `--configclear, -cfc` - 清空所有文件夹配置（保留其他配置项）
+- `--recycle-bin, -rb <路径>` - 设置回收站目录（支持绝对路径和相对路径）
+- `--list-recycle-bin, -lrb` - 列出当前回收站目录设置
 
 #### 其他选项
 
@@ -263,6 +265,24 @@ file-cleanup --list
 
 ```bash
 file-cleanup --configclear
+```
+
+### 回收站目录管理
+
+#### 设置回收站目录
+
+```bash
+# 使用绝对路径
+file-cleanup --recycle-bin "E:\recycle-bin"
+
+# 使用相对路径
+file-cleanup --recycle-bin ./recycle-bin
+```
+
+#### 列出当前回收站目录设置
+
+```bash
+file-cleanup --list-recycle-bin
 ```
 
 ### 执行清理
