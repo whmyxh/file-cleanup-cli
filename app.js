@@ -242,15 +242,6 @@ const showHelp = () => {
   console.log('    - 配置文件中moveConfig部分可自定义回收站行为');
   console.log('    - 移动后的文件可以在回收站中查看和恢复');
   console.log('');
-  console.log('  通配符使用:');
-  console.log('    - 使用 "*" 表示所有文件类型，需在配置文件中用引号包裹');
-  console.log('    - 示例：allowedExtensions: - "*"');
-  console.log('');
-  console.log('  日志配置:');
-  console.log('    - 日志文件默认存储在 logs/cleanup.log');
-  console.log('    - 支持配置日志级别、文件大小和保留数量');
-  console.log('    - 日志级别：error, warn, info, verbose, debug, silly');
-  console.log('');
   console.log('相对路径使用说明:');
   console.log('  - 支持当前目录相对路径: ./subfolder, ./file.txt');
   console.log('  - 支持上级目录相对路径: ../parentfolder, ../../grandparentfolder');

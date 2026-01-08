@@ -8,7 +8,6 @@ import fs from 'fs-extra';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import yaml from 'js-yaml';
-import crypto from 'crypto';
 import logger from './logger.js';
 
 /**
@@ -72,37 +71,7 @@ const formatFileSize = (bytes) => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-/**
- * 计算文件的MD5校验和
- * @param {string} filePath - 文件路径
- * @returns {string} - 文件的MD5校验和
- */
-const calculateFileHash = (filePath) => {
-  try {
-    // 使用fs.createReadStream创建可读流，避免一次性读取大文件
-    const fileStream = fs.createReadStream(filePath);
-    const hash = crypto.createHash('md5');
-    
-    return new Promise((resolve, reject) => {
-      fileStream.on('data', (data) => {
-        hash.update(data);
-      });
-      
-      fileStream.on('end', () => {
-        const digest = hash.digest('hex');
-        resolve(digest);
-      });
-      
-      fileStream.on('error', (error) => {
-        logger.error(`计算文件校验和失败: ${filePath}`, { error: error.message });
-        reject(error);
-      });
-    });
-  } catch (error) {
-    logger.error(`计算文件校验和失败: ${filePath}`, { error: error.message });
-    throw error;
-  }
-};
+
 
 /**
  * 检查文件是否为系统保护文件
@@ -139,7 +108,7 @@ const isAllowedExtension = (fileName) => {
 const isExpired = (filePath, retentionDays) => {
   try {
     const stats = fs.statSync(filePath);
-    const fileTimeMs = Math.max(stats.birthtimeMs || 0, stats.mtimeMs || 0);
+    const fileTimeMs = Math.min(stats.birthtimeMs || 0, stats.mtimeMs || 0);
     const fileAgeMs = Date.now() - fileTimeMs;
     const retentionMs = retentionDays * 24 * 60 * 60 * 1000;
     
@@ -170,9 +139,6 @@ const isFileInUse = (filePath) => {
     fd = fs.openSync(filePath, 'r+');
     fs.closeSync(fd);
     fd = null;
-    
-    // 移除 'w' 模式打开，因为这会清空文件内容
-    // 只需要验证文件是否可读写即可，不需要写入模式
     
     logger.debug(`文件未被使用: ${filePath}`);
     return false;
@@ -261,50 +227,24 @@ const getUniqueFileName = (targetDir, fileName) => {
  * @returns {Promise<Object>} - 移动结果 { success: boolean, targetPath: string, error?: string }
  */
 const moveFile = async (filePath, targetDir, baseDir) => {
-  let targetPath = null;
   let uniqueTargetPath = null;
   
   try {
     logger.info(`开始移动文件: ${filePath}`, { targetDir, baseDir });
     
-    // 读取源文件内容，确保能正确读取
-    let sourceContent;
-    let stats;
-    try {
-        // 验证文件是否存在且可访问
-        if (!fs.existsSync(filePath)) {
-            throw new Error(`文件不存在: ${filePath}`);
-        }
-        logger.debug(`文件存在: ${filePath}`);
-        
-        // 检查文件权限
-        stats = fs.statSync(filePath);
-        logger.info(`文件权限: ${stats.mode.toString(8)}`, { filePath });
-        logger.info(`文件大小 (stat): ${stats.size}字节`, { filePath });
-        
-        // 尝试使用原始Buffer读取
-        sourceContent = fs.readFileSync(filePath);
-        logger.info(`源文件内容长度 (Buffer): ${sourceContent.length}字节`, { filePath });
-        
-        // 尝试将Buffer转换为字符串查看内容
-        const contentStr = sourceContent.toString('utf8');
-        logger.info(`源文件内容 (字符串): "${contentStr}"`, { filePath });
-        
-    } catch (readError) {
-        logger.error(`读取源文件失败: ${filePath}`, { error: readError.message });
-        throw readError;
+    // 验证文件是否存在且可访问
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`文件不存在: ${filePath}`);
     }
+    logger.debug(`文件存在: ${filePath}`);
     
-    // 确保源文件内容不为空
-    if (sourceContent.length === 0) {
-        logger.warn(`源文件内容为空: ${filePath}`);
-    }
+    // 检查文件权限
+    const stats = fs.statSync(filePath);
+    logger.info(`文件权限: ${stats.mode.toString(8)}`, { filePath });
+    logger.info(`文件大小 (stat): ${stats.size}字节`, { filePath });
     
     // 构建目标路径
     const fileName = path.basename(filePath);
-    // 简化路径处理，直接使用文件名作为目标文件名
-    const simpleTargetPath = path.join(targetDir, fileName);
-    logger.debug(`简化目标路径: ${simpleTargetPath}`);
     
     // 获取唯一的目标路径
     uniqueTargetPath = getUniqueFileName(targetDir, fileName);
@@ -321,15 +261,10 @@ const moveFile = async (filePath, targetDir, baseDir) => {
     const fileSize = formatFileSize(stats.size);
     logger.info(`文件信息: 大小=${fileSize} (${stats.size}字节)`, { filePath });
     
-    // 第一步：计算源文件的校验和
-    const sourceHash = await calculateFileHash(filePath);
-    logger.debug(`源文件校验和: ${sourceHash}`, { filePath });
-    
-    // 第二步：复制文件（使用直接的文件读写方法，确保内容被正确复制）
-    logger.info(`开始复制文件: ${filePath} -> ${uniqueTargetPath}`);
-    // 写入目标文件
-    fs.writeFileSync(uniqueTargetPath, sourceContent);
-    logger.debug(`文件复制完成，复制了 ${sourceContent.length} 字节`, { sourcePath: filePath, targetPath: uniqueTargetPath });
+    // 使用 fs-extra 的 move() 方法移动文件
+    logger.info(`开始移动文件: ${filePath} -> ${uniqueTargetPath}`);
+    await fs.move(filePath, uniqueTargetPath, { overwrite: false });
+    logger.debug(`文件移动完成`, { sourcePath: filePath, targetPath: uniqueTargetPath });
     
     // 验证目标文件是否存在
     if (!fs.existsSync(uniqueTargetPath)) {
@@ -338,68 +273,17 @@ const moveFile = async (filePath, targetDir, baseDir) => {
       return { success: false, targetPath: null, fileName: path.basename(filePath), error: errorMsg };
     }
     
-    // 读取目标文件内容，确保能正确读取
-    const targetContent = fs.readFileSync(uniqueTargetPath);
-    logger.debug(`目标文件内容长度: ${targetContent.length}字节`, { uniqueTargetPath });
-    
-    // 第三步：验证文件大小，确保复制完整
-    const targetStats = fs.statSync(uniqueTargetPath);
-    if (stats.size !== targetStats.size) {
-      // 复制不完整，删除目标文件并返回错误
-      const errorMsg = `文件复制不完整: 源大小 ${stats.size}，目标大小 ${targetStats.size}`;
-      logger.error(errorMsg, { sourcePath: filePath, targetPath: uniqueTargetPath });
-      
-      try {
-        if (fs.existsSync(uniqueTargetPath)) {
-          fs.removeSync(uniqueTargetPath);
-          logger.debug(`删除不完整的目标文件: ${uniqueTargetPath}`);
-        }
-      } catch (removeError) {
-        logger.warn(`删除不完整的目标文件失败: ${uniqueTargetPath}`, { error: removeError.message });
-      }
-      
-      return { success: false, targetPath: null, fileName: path.basename(filePath), error: errorMsg };
-    }
-    
-    // 第四步：计算目标文件的校验和，确保内容一致
-    const targetHash = await calculateFileHash(uniqueTargetPath);
-    logger.debug(`目标文件校验和: ${targetHash}`, { uniqueTargetPath });
-    
-    if (sourceHash !== targetHash) {
-      // 校验和不匹配，删除目标文件并返回错误
-      const errorMsg = `文件内容不匹配: 源文件校验和 ${sourceHash}，目标文件校验和 ${targetHash}`;
-      logger.error(errorMsg, { sourcePath: filePath, targetPath: uniqueTargetPath });
-      
-      try {
-        if (fs.existsSync(uniqueTargetPath)) {
-          fs.removeSync(uniqueTargetPath);
-          logger.debug(`删除内容不匹配的目标文件: ${uniqueTargetPath}`);
-        }
-      } catch (removeError) {
-        logger.warn(`删除内容不匹配的目标文件失败: ${uniqueTargetPath}`, { error: removeError.message });
-      }
-      
-      return { success: false, targetPath: null, fileName: path.basename(filePath), error: errorMsg };
-    }
-    
-    // 第五步：验证通过后，删除源文件
-    logger.info(`验证通过，开始删除源文件: ${filePath}`);
-    fs.removeSync(filePath);
-    logger.debug(`源文件删除完成: ${filePath}`);
-    
     logger.info(`成功移动文件: ${filePath} -> ${uniqueTargetPath}`, {
       fileName: path.basename(filePath),
       sourcePath: filePath,
       targetPath: uniqueTargetPath,
       fileSize,
-      sourceSize: stats.size,
-      targetSize: targetStats.size,
-      hash: sourceHash
+      sourceSize: stats.size
     });
     
     return { success: true, targetPath: uniqueTargetPath, fileName: path.basename(filePath), fileSize };
   } catch (error) {
-    logger.error(`移动文件失败: ${filePath}`, { error: error.message, targetPath });
+    logger.error(`移动文件失败: ${filePath}`, { error: error.message });
     
     // 清理：如果目标文件已创建，删除它
     if (uniqueTargetPath && fs.existsSync(uniqueTargetPath)) {
@@ -579,8 +463,6 @@ const cleanFolder = async (folderPath, retentionDays, baseDir = null, forceDelet
  */
 const executeCleanup = async (folders, retentionDays, forceDelete = false) => {
   logger.info('开始执行清理任务', { retentionDays, forceDelete });
-  
-  
   
   if (config.allowedExtensions.includes('*')) {
     logger.warn('检测到通配符配置（"*"），将处理所有文件类型！', {

@@ -174,11 +174,19 @@ ${folders.map(folder => {
         }
         
         // 提取folders部分之前和之后的内容
-        const beforeFolders = existingContent.slice(0, foldersStartIndex);
-        const afterFolders = existingContent.slice(foldersEndIndex);
-        
-        // 重新组合内容，只替换folders部分
-        yamlContent = beforeFolders + newFoldersSection + '\n' + afterFolders;
+      const beforeFolders = existingContent.slice(0, foldersStartIndex);
+      let afterFolders = existingContent.slice(foldersEndIndex);
+      
+      // 去除afterFolders开头的空白行，避免重复添加换行符
+      afterFolders = afterFolders.replace(/^\s*\n/, '');
+      
+      // 重新组合内容，只替换folders部分
+      yamlContent = beforeFolders + newFoldersSection;
+      
+      // 只有当afterFolders不为空时，才添加换行符和afterFolders
+      if (afterFolders.trim()) {
+        yamlContent += '\n' + afterFolders;
+      }
       } else {
         // 没有找到folders部分，在文件末尾添加
         yamlContent = existingContent + '\n\n# 要清理的文件夹列表（绝对路径）\n' + newFoldersSection;
@@ -189,9 +197,9 @@ ${folders.map(folder => {
 # 定义清理规则和保留策略
 
 # 默认文件保留天数（单位：天）
-retentionDays: 7
+retentionDays: 0
 
-# 允许删除的文件扩展名列表（区分大小写）
+# 允许删除的文件扩展名列表（区分大小写），使用"*"代表处理所有文件
 allowedExtensions:
   - docx
   - xlsx
@@ -216,14 +224,14 @@ logConfig:
   maxSize: 10
   # 日志文件最大数量
   maxFiles: 5
+# 回收站目录设置
+moveConfig:
+  # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）
+  targetDirectory: "trash"
 
 # 要清理的文件夹列表（绝对路径）
 folders:
 
-# 文件移动配置
-moveConfig:
-  # 文件移动目标目录（支持绝对路径或相对于项目根目录的路径）
-  targetDirectory: "trash"
 `;
     }
     
